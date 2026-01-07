@@ -64,7 +64,8 @@ function RootLayoutContent() {
       >
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="add-habit" />
+        <Stack.Screen name="add-habit" options={{ presentation: 'modal' }} />
+        <Stack.Screen name="edit-habit" options={{ presentation: 'modal' }} />
         <Stack.Screen name="manage-habits" />
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />
