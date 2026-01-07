@@ -41,7 +41,8 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "backendUrl": "https://764ynjbqfq96w5kys7nc7ggyxbwuyvyq.app.specular.dev"
     }
   },
   "scheme": "Momentum Habit Tracker"
