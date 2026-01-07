@@ -9,14 +9,15 @@ import {
   useColorScheme,
   ScrollView,
   Platform,
+  Alert,
 } from 'react-native';
+import { router } from 'expo-router';
 import { BlurView } from 'expo-blur';
 import * as Haptics from 'expo-haptics';
+import { useAuth } from '@/contexts/AuthContext';
 import { colors } from '@/styles/commonStyles';
 import { IconSymbol } from './IconSymbol';
 import { usePremium } from '@/contexts/PremiumContext';
-import { router } from 'expo-router';
-import { useAuth } from '@/contexts/AuthContext';
 
 interface PaywallModalProps {
   visible: boolean;
@@ -27,81 +28,73 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? colors.dark : colors.light;
-  const { showPaywall } = usePremium();
   const { user } = useAuth();
+  const { upgradeToPremium } = usePremium();
 
   const handleUpgrade = async () => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
-    // If user is not authenticated, redirect to auth screen
     if (!user) {
-      onClose();
-      router.push('/auth');
+      Alert.alert(
+        'Account Required',
+        'Please create an account to upgrade to Premium.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Create Account',
+            onPress: () => {
+              onClose();
+              router.push('/auth');
+            },
+          },
+        ]
+      );
       return;
     }
 
-    // Show Superwall paywall
-    await showPaywall();
+    // For Expo Go testing, simulate premium upgrade
+    Alert.alert(
+      'Upgrade to Premium',
+      'In production, this would connect to your payment provider. For now, would you like to activate Premium for testing?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Activate Premium',
+          onPress: async () => {
+            try {
+              await upgradeToPremium();
+              Alert.alert('Success!', 'Premium features activated! 🎉');
+              onClose();
+            } catch (error) {
+              Alert.alert('Error', 'Failed to activate premium. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
-
-  const premiumFeatures = [
-    {
-      icon: 'all-inclusive',
-      title: 'Unlimited Habits',
-      description: 'Create as many habits as you need to reach your goals',
-    },
-    {
-      icon: 'photo-library',
-      title: 'Custom Icons',
-      description: 'Upload your own images from your photo gallery',
-    },
-    {
-      icon: 'group',
-      title: 'Social Features',
-      description: 'Create groups and track habits with friends & family',
-    },
-    {
-      icon: 'insights',
-      title: 'Advanced Analytics',
-      description: 'Get deeper insights into your habit patterns',
-    },
-    {
-      icon: 'cloud-sync',
-      title: 'Cloud Sync',
-      description: 'Access your habits across all your devices',
-    },
-    {
-      icon: 'support',
-      title: 'Priority Support',
-      description: 'Get help when you need it most',
-    },
-  ];
 
   return (
     <Modal
       visible={visible}
-      transparent
-      animationType="fade"
+      animationType="slide"
+      transparent={true}
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
-        <BlurView intensity={20} style={StyleSheet.absoluteFill} tint={isDark ? 'dark' : 'light'} />
-        
+      <BlurView intensity={80} style={styles.blurContainer}>
         <View style={styles.modalContainer}>
-          <View style={[styles.modal, { backgroundColor: theme.background }]}>
-            {/* Close Button */}
+          <View style={[styles.modalContent, { backgroundColor: theme.card }]}>
+            {/* Close button */}
             <TouchableOpacity
-              style={[styles.closeButton, { backgroundColor: theme.highlight }]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                onClose();
-              }}
+              style={styles.closeButton}
+              onPress={onClose}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
             >
               <IconSymbol
                 android_material_icon_name="close"
                 ios_icon_name="xmark"
-                size={20}
-                color={theme.text}
+                size={24}
+                color={theme.textSecondary}
               />
             </TouchableOpacity>
 
@@ -111,106 +104,129 @@ export function PaywallModal({ visible, onClose }: PaywallModalProps) {
             >
               {/* Header */}
               <View style={styles.header}>
-                <View style={[styles.badge, { backgroundColor: theme.primary + '20' }]}>
-                  <IconSymbol
-                    android_material_icon_name="star"
-                    ios_icon_name="star.fill"
-                    size={24}
-                    color={theme.primary}
-                  />
-                </View>
+                <Text style={[styles.badge, { backgroundColor: theme.primary + '20', color: theme.primary }]}>
+                  PREMIUM
+                </Text>
                 <Text style={[styles.title, { color: theme.text }]}>
-                  Upgrade to Premium
+                  Unlock Unlimited Habits
                 </Text>
                 <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-                  Free users can create up to 3 habits. Unlock unlimited habits and more with Premium.
+                  Take your habit tracking to the next level
                 </Text>
               </View>
 
               {/* Features */}
               <View style={styles.features}>
-                {premiumFeatures.map((feature, index) => (
-                  <View
-                    key={index}
-                    style={[
-                      styles.featureItem,
-                      {
-                        backgroundColor: theme.card,
-                        borderColor: theme.border,
-                      },
-                    ]}
-                  >
-                    <View style={[styles.featureIcon, { backgroundColor: theme.primary + '15' }]}>
-                      <IconSymbol
-                        android_material_icon_name={feature.icon}
-                        ios_icon_name={feature.icon}
-                        size={24}
-                        color={theme.primary}
-                      />
-                    </View>
-                    <View style={styles.featureText}>
-                      <Text style={[styles.featureTitle, { color: theme.text }]}>
-                        {feature.title}
-                      </Text>
-                      <Text style={[styles.featureDescription, { color: theme.textSecondary }]}>
-                        {feature.description}
-                      </Text>
-                    </View>
-                  </View>
-                ))}
+                <FeatureItem
+                  icon="check-circle"
+                  title="Unlimited Habits"
+                  description="Create as many habits as you need"
+                  theme={theme}
+                />
+                <FeatureItem
+                  icon="image"
+                  title="Custom Icons"
+                  description="Upload your own habit icons from your photo gallery"
+                  theme={theme}
+                />
+                <FeatureItem
+                  icon="sync"
+                  title="Cloud Sync"
+                  description="Access your habits across all devices"
+                  theme={theme}
+                />
+                <FeatureItem
+                  icon="insights"
+                  title="Advanced Analytics"
+                  description="Deep insights into your habit patterns"
+                  theme={theme}
+                />
               </View>
 
-              {/* CTA */}
+              {/* Pricing */}
+              <View style={[styles.pricingCard, { backgroundColor: theme.highlight }]}>
+                <Text style={[styles.price, { color: theme.text }]}>$4.99/month</Text>
+                <Text style={[styles.priceSubtext, { color: theme.textSecondary }]}>
+                  Cancel anytime
+                </Text>
+              </View>
+
+              {/* CTA Button */}
               <TouchableOpacity
                 style={[styles.upgradeButton, { backgroundColor: theme.primary }]}
                 onPress={handleUpgrade}
+                activeOpacity={0.8}
               >
                 <Text style={styles.upgradeButtonText}>
-                  {user ? 'Continue to Premium' : 'Create Account & Subscribe'}
+                  {user ? 'Upgrade to Premium' : 'Create Account & Upgrade'}
                 </Text>
               </TouchableOpacity>
 
-              <Text style={[styles.disclaimer, { color: theme.textSecondary }]}>
-                {user 
-                  ? 'Subscription will be tied to your account'
-                  : 'You\'ll create an account as part of the subscription process'
-                }
+              {/* Terms */}
+              <Text style={[styles.terms, { color: theme.textSecondary }]}>
+                By subscribing, you agree to our Terms of Service and Privacy Policy
               </Text>
             </ScrollView>
           </View>
         </View>
-      </View>
+      </BlurView>
     </Modal>
   );
 }
 
+function FeatureItem({
+  icon,
+  title,
+  description,
+  theme,
+}: {
+  icon: string;
+  title: string;
+  description: string;
+  theme: any;
+}) {
+  return (
+    <View style={styles.featureItem}>
+      <View style={[styles.featureIcon, { backgroundColor: theme.primary + '15' }]}>
+        <IconSymbol
+          android_material_icon_name={icon as any}
+          ios_icon_name={icon}
+          size={24}
+          color={theme.primary}
+        />
+      </View>
+      <View style={styles.featureText}>
+        <Text style={[styles.featureTitle, { color: theme.text }]}>{title}</Text>
+        <Text style={[styles.featureDescription, { color: theme.textSecondary }]}>
+          {description}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  overlay: {
+  blurContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
   },
   modalContainer: {
-    width: '90%',
-    maxWidth: 500,
-    maxHeight: '85%',
+    flex: 1,
+    justifyContent: 'flex-end',
   },
-  modal: {
-    borderRadius: 24,
-    overflow: 'hidden',
+  modalContent: {
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '90%',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.3,
-        shadowRadius: 24,
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.15,
+        shadowRadius: 16,
       },
       android: {
-        elevation: 12,
-      },
-      web: {
-        boxShadow: '0 8px 24px rgba(0, 0, 0, 0.3)',
+        elevation: 8,
       },
     }),
   },
@@ -218,12 +234,12 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     right: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    zIndex: 10,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10,
   },
   scrollContent: {
     padding: 24,
@@ -234,11 +250,12 @@ const styles = StyleSheet.create({
     marginBottom: 32,
   },
   badge: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    justifyContent: 'center',
-    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1,
     marginBottom: 16,
   },
   title: {
@@ -250,18 +267,14 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 16,
     textAlign: 'center',
-    lineHeight: 22,
-    paddingHorizontal: 16,
   },
   features: {
-    gap: 12,
-    marginBottom: 24,
+    gap: 20,
+    marginBottom: 32,
   },
   featureItem: {
     flexDirection: 'row',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
+    alignItems: 'flex-start',
   },
   featureIcon: {
     width: 48,
@@ -280,24 +293,48 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   featureDescription: {
-    fontSize: 14,
+    fontSize: 15,
     lineHeight: 20,
   },
-  upgradeButton: {
-    borderRadius: 14,
-    paddingVertical: 18,
+  pricingCard: {
+    padding: 20,
+    borderRadius: 16,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
+    marginBottom: 24,
+  },
+  price: {
+    fontSize: 32,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  priceSubtext: {
+    fontSize: 14,
+  },
+  upgradeButton: {
+    padding: 18,
+    borderRadius: 16,
+    alignItems: 'center',
+    marginBottom: 16,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   upgradeButtonText: {
     color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '600',
   },
-  disclaimer: {
-    fontSize: 13,
+  terms: {
+    fontSize: 12,
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 16,
   },
 });

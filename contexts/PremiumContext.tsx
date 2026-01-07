@@ -1,108 +1,72 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Platform } from 'react-native';
-import { SuperwallProvider, useUser, usePlacement } from 'expo-superwall';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from './AuthContext';
 
 interface PremiumContextType {
   isPremium: boolean;
-  isLoading: boolean;
-  showPaywall: () => Promise<void>;
+  loading: boolean;
+  showPaywall: () => void;
   checkPremiumStatus: () => Promise<void>;
+  upgradeToPremium: () => Promise<void>;
 }
 
 const PremiumContext = createContext<PremiumContextType | undefined>(undefined);
 
-// Superwall API key - Replace with your actual key
-const SUPERWALL_API_KEY = 'pk_test_your_key_here'; // TODO: Replace with actual RevenueCat testing key
-
-export function SuperwallWrapper({ children }: { children: ReactNode }) {
-  return (
-    <SuperwallProvider 
-      apiKeys={{ 
-        ios: SUPERWALL_API_KEY,
-        android: SUPERWALL_API_KEY 
-      }}
-      onConfigurationError={(error) => {
-        console.error('Superwall configuration error:', error);
-      }}
-    >
-      {children}
-    </SuperwallProvider>
-  );
-}
+const PREMIUM_KEY = '@momentum_premium_status';
+const DEVELOPER_EMAIL = 'developerposeiduxfu39a33es@gmail.com';
 
 export function PremiumProvider({ children }: { children: ReactNode }) {
   const [isPremium, setIsPremium] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
-  const { subscriptionStatus, identify } = useUser();
-  const { registerPlacement } = usePlacement({
-    onDismiss: (info, result) => {
-      console.log('Paywall dismissed:', result);
-      // Check subscription status after paywall dismissal
-      checkPremiumStatus();
-    },
-    onError: (error) => {
-      console.error('Paywall error:', error);
-    },
-  });
 
   useEffect(() => {
     checkPremiumStatus();
-  }, [subscriptionStatus, user]);
-
-  useEffect(() => {
-    // Identify user with Superwall when authenticated
-    if (user?.id) {
-      identify(user.id).catch(console.error);
-    }
-  }, [user?.id]);
+  }, [user]);
 
   const checkPremiumStatus = async () => {
     try {
-      // Check for developer account
-      if (user?.email === 'developerposeiduxfu39a33es@gmail.com') {
+      // Developer bypass
+      if (user?.email === DEVELOPER_EMAIL) {
+        console.log('[Premium] Developer account detected - granting premium access');
         setIsPremium(true);
-        setIsLoading(false);
+        setLoading(false);
         return;
       }
 
-      // Check Superwall subscription status
-      const isActive = subscriptionStatus?.status === 'ACTIVE';
-      setIsPremium(isActive);
+      const stored = await AsyncStorage.getItem(PREMIUM_KEY);
+      if (stored) {
+        const premiumData = JSON.parse(stored);
+        setIsPremium(premiumData.isPremium || false);
+        console.log('[Premium] Loaded premium status:', premiumData.isPremium);
+      } else {
+        console.log('[Premium] No premium status found - user is free tier');
+      }
     } catch (error) {
-      console.error('Error checking premium status:', error);
-      setIsPremium(false);
+      console.error('[Premium] Error checking premium status:', error);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const showPaywall = async () => {
+  const upgradeToPremium = async () => {
     try {
-      await registerPlacement({
-        placement: 'habit_limit', // Configure this placement in Superwall dashboard
-        feature: () => {
-          // User has premium access
-          console.log('Premium feature unlocked');
-          setIsPremium(true);
-        },
-      });
+      console.log('[Premium] Upgrading user to premium');
+      await AsyncStorage.setItem(PREMIUM_KEY, JSON.stringify({ isPremium: true }));
+      setIsPremium(true);
     } catch (error) {
-      console.error('Error showing paywall:', error);
+      console.error('[Premium] Error upgrading to premium:', error);
+      throw error;
     }
+  };
+
+  const showPaywall = () => {
+    console.log('[Premium] Paywall requested - will be shown via PaywallModal component');
   };
 
   return (
-    <PremiumContext.Provider
-      value={{
-        isPremium,
-        isLoading,
-        showPaywall,
-        checkPremiumStatus,
-      }}
-    >
+    <PremiumContext.Provider value={{ isPremium, loading, showPaywall, checkPremiumStatus, upgradeToPremium }}>
       {children}
     </PremiumContext.Provider>
   );
