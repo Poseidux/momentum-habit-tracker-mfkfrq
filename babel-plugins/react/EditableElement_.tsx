@@ -1,3 +1,4 @@
+
 /* eslint-disable */
 
 // @eslint-ignore-file
@@ -28,9 +29,33 @@ export const getType = (el: any): ElementTypes | undefined => {
   return undefined;
 };
 
-const toArray = (object: T | T[]): T[] => {
+const toArray = <T,>(object: T | T[]): T[] => {
   if (Array.isArray(object)) return object;
   return [object];
+};
+
+// Check if element is an SVG component
+const isSVGElement = (el: any): boolean => {
+  const typeName = el?.type?.displayName || el?.type?.name || typeof el?.type;
+  if (typeof typeName === 'string') {
+    const lowerName = typeName.toLowerCase();
+    return lowerName === 'svg' || 
+           lowerName === 'circle' || 
+           lowerName === 'rect' || 
+           lowerName === 'path' || 
+           lowerName === 'line' || 
+           lowerName === 'polygon' ||
+           lowerName === 'polyline' ||
+           lowerName === 'ellipse' ||
+           lowerName === 'g' ||
+           lowerName === 'defs' ||
+           lowerName === 'lineargradient' ||
+           lowerName === 'radialgradient' ||
+           lowerName === 'stop' ||
+           lowerName === 'text' ||
+           lowerName === 'tspan';
+  }
+  return false;
 };
 
 export default function EditableElement_(_props: PropsWithChildren<any>) {
@@ -50,6 +75,11 @@ export default function EditableElement_(_props: PropsWithChildren<any>) {
   // If we are not running in the web the windows will causes
   // issues hence editable mode is not enabled.
   if (Platform.OS !== "web") {
+    return cloneElement(children, props);
+  }
+
+  // Skip SVG elements entirely - they don't work with the editing system
+  if (isSVGElement(children)) {
     return cloneElement(children, props);
   }
 
@@ -135,4 +165,7 @@ export default function EditableElement_(_props: PropsWithChildren<any>) {
       children: children.props.children,
     });
   }
+
+  // For any unrecognized type, just return the original element
+  return cloneElement(children, props);
 }
