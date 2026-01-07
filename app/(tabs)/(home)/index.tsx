@@ -1,5 +1,17 @@
 
+import { useHabits } from '@/contexts/HabitContext';
 import React, { useState } from 'react';
+import {
+  getTodayString,
+  isHabitScheduledForDate,
+  toggleHabitCompletion,
+  calculateStreak,
+} from '@/utils/habitUtils';
+import * as Haptics from 'expo-haptics';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { colors } from '@/styles/commonStyles';
+import { ProgressRing } from '@/components/ProgressRing';
 import {
   View,
   Text,
@@ -9,188 +21,146 @@ import {
   useColorScheme,
   Platform,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
-import * as Haptics from 'expo-haptics';
-import Animated, { FadeIn, ScaleIn } from 'react-native-reanimated';
-import { colors } from '@/styles/commonStyles';
-import { useHabits } from '@/contexts/HabitContext';
-import { ProgressRing } from '@/components/ProgressRing';
-import {
-  getTodayString,
-  isHabitScheduledForDate,
-  toggleHabitCompletion,
-  calculateStreak,
-} from '@/utils/habitUtils';
 
 export default function TodayScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? colors.dark : colors.light;
-
   const { habits, updateHabit } = useHabits();
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [today] = useState(getTodayString());
 
-  const today = new Date();
-  const todayString = getTodayString();
-  
-  const todayHabits = habits.filter(h => isHabitScheduledForDate(h, today));
-  const completedCount = todayHabits.filter(h => h.completions.includes(todayString)).length;
+  const todayHabits = habits.filter((h) => isHabitScheduledForDate(h, new Date()));
+  const completedCount = todayHabits.filter((h) => h.completions?.includes(today)).length;
   const totalCount = todayHabits.length;
-  const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
+  const progress = totalCount > 0 ? completedCount / totalCount : 0;
 
   const handleToggleCompletion = async (habitId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const habit = habits.find((h) => h.id === habitId);
+    if (!habit) return;
     
-    const habit = habits.find(h => h.id === habitId);
-    if (!habit) {
-      return;
-    }
-
-    const updated = toggleHabitCompletion(habit, todayString);
-    await updateHabit(updated);
-    setRefreshKey(prev => prev + 1);
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const updated = toggleHabitCompletion(habit, today);
+    updateHabit(updated);
   };
 
   const handleEditHabit = (habitId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push(`/edit-habit?id=${habitId}`);
+    router.push({ pathname: '/edit-habit', params: { habitId } });
   };
 
   const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
+    return date.toLocaleDateString('en-US', { 
+      weekday: 'long', 
+      month: 'long', 
+      day: 'numeric' 
     });
   };
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <ScrollView
+      <ScrollView 
+        style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Header */}
-        <View style={styles.header}>
+        <Animated.View entering={FadeIn} style={styles.header}>
           <Text style={[styles.date, { color: theme.textSecondary }]}>
-            {formatDate(today)}
+            {formatDate(new Date())}
           </Text>
           <Text style={[styles.title, { color: theme.text }]}>Today</Text>
-        </View>
-
-        {/* Progress Summary */}
-        <Animated.View
-          entering={FadeIn.duration(400)}
-          style={[styles.summaryCard, { backgroundColor: theme.card }]}
-        >
-          <View style={styles.summaryContent}>
-            <View style={styles.summaryText}>
-              <Text style={[styles.summaryTitle, { color: theme.text }]}>
-                {completedCount} of {totalCount} completed
-              </Text>
-              <Text style={[styles.summarySubtitle, { color: theme.textSecondary }]}>
-                {progress === 100 && totalCount > 0
-                  ? '🎉 Perfect day!'
-                  : progress >= 50
-                  ? 'Keep going!'
-                  : 'Let\'s get started!'}
-              </Text>
-            </View>
-            <ProgressRing
-              size={80}
-              strokeWidth={8}
-              progress={progress}
-              color={theme.primary}
-              backgroundColor={theme.highlight}
-            />
-          </View>
         </Animated.View>
 
-        {/* Habits List */}
-        <View style={styles.habitsSection}>
-          {todayHabits.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-                No habits scheduled for today
-              </Text>
-              <TouchableOpacity
-                style={[styles.addButton, { backgroundColor: theme.primary }]}
-                onPress={() => {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                  router.push('/add-habit');
-                }}
-              >
-                <Text style={styles.addButtonText}>Add Your First Habit</Text>
-              </TouchableOpacity>
+        {totalCount > 0 && (
+          <Animated.View entering={FadeIn.delay(100)} style={styles.summaryCard}>
+            <View style={styles.summaryContent}>
+              <View style={styles.summaryText}>
+                <Text style={[styles.summaryTitle, { color: theme.text }]}>
+                  {completedCount} of {totalCount} completed
+                </Text>
+                <Text style={[styles.summarySubtitle, { color: theme.textSecondary }]}>
+                  {progress === 1 ? "Perfect day! 🎉" : "Keep going!"}
+                </Text>
+              </View>
+              <ProgressRing progress={progress} size={60} strokeWidth={6} />
             </View>
-          ) : (
-            todayHabits.map((habit, index) => {
-              const isCompleted = habit.completions.includes(todayString);
-              const streak = calculateStreak(habit);
+          </Animated.View>
+        )}
 
-              return (
-                <Animated.View
-                  key={habit.id}
-                  entering={ScaleIn.delay(index * 100).duration(300)}
+        <View style={styles.habitsList}>
+          {todayHabits.map((habit, index) => {
+            const isCompleted = habit.completions?.includes(today);
+            const streak = calculateStreak(habit);
+            
+            return (
+              <Animated.View 
+                key={habit.id}
+                entering={FadeInDown.delay(index * 50).duration(400)}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.habitCard,
+                    { 
+                      backgroundColor: theme.card,
+                      borderColor: isCompleted ? habit.color : theme.border,
+                      borderWidth: isCompleted ? 2 : 1,
+                    }
+                  ]}
+                  onPress={() => handleToggleCompletion(habit.id)}
+                  onLongPress={() => handleEditHabit(habit.id)}
+                  activeOpacity={0.7}
                 >
-                  <TouchableOpacity
-                    style={[
-                      styles.habitCard,
-                      {
-                        backgroundColor: theme.card,
-                        borderColor: isCompleted ? habit.color : theme.border,
-                        borderWidth: isCompleted ? 2 : 1,
-                      },
-                    ]}
-                    onPress={() => handleToggleCompletion(habit.id)}
-                    onLongPress={() => handleEditHabit(habit.id)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.habitLeft}>
-                      <Text style={styles.habitIcon}>{habit.icon}</Text>
-                      <View style={styles.habitInfo}>
+                  <View style={styles.habitHeader}>
+                    <View style={styles.habitInfo}>
+                      <View style={[styles.iconCircle, { backgroundColor: habit.color + '20' }]}>
+                        <Text style={styles.icon}>{habit.icon}</Text>
+                      </View>
+                      <View style={styles.habitText}>
                         <Text style={[styles.habitName, { color: theme.text }]}>
                           {habit.name}
                         </Text>
                         {streak > 0 && (
-                          <Text style={[styles.habitStreak, { color: theme.textSecondary }]}>
+                          <Text style={[styles.streak, { color: theme.textSecondary }]}>
                             🔥 {streak} day streak
                           </Text>
                         )}
                       </View>
                     </View>
-
                     <View
                       style={[
                         styles.checkButton,
                         {
-                          backgroundColor: isCompleted ? habit.color : theme.highlight,
-                        },
+                          backgroundColor: isCompleted ? habit.color : theme.border + '40',
+                        }
                       ]}
                     >
-                      {isCompleted && <Text style={styles.checkMark}>✓</Text>}
+                      {isCompleted && <Text style={styles.checkmark}>✓</Text>}
                     </View>
-                  </TouchableOpacity>
-                </Animated.View>
-              );
-            })
-          )}
+                  </View>
+                </TouchableOpacity>
+              </Animated.View>
+            );
+          })}
         </View>
 
-        {/* Add Habit Button */}
-        {todayHabits.length > 0 && (
-          <TouchableOpacity
-            style={[styles.floatingAddButton, { backgroundColor: theme.primary }]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push('/add-habit');
-            }}
-          >
-            <Text style={styles.floatingAddText}>+ Add Habit</Text>
-          </TouchableOpacity>
+        {totalCount === 0 && (
+          <Animated.View entering={FadeIn.delay(200)} style={styles.emptyState}>
+            <Text style={[styles.emptyTitle, { color: theme.text }]}>
+              No habits for today
+            </Text>
+            <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
+              Add your first habit to get started
+            </Text>
+          </Animated.View>
         )}
       </ScrollView>
+
+      <TouchableOpacity
+        style={[styles.fab, { backgroundColor: colors.primary }]}
+        onPress={() => router.push('/add-habit')}
+        activeOpacity={0.8}
+      >
+        <Text style={styles.fabIcon}>+</Text>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -199,17 +169,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
   scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: Platform.OS === 'android' ? 16 : 0,
-    paddingBottom: 120,
+    padding: 20,
+    paddingBottom: 100,
   },
   header: {
     marginBottom: 24,
   },
   date: {
     fontSize: 14,
-    fontWeight: '500',
     marginBottom: 4,
   },
   title: {
@@ -217,11 +188,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   summaryCard: {
+    padding: 20,
     borderRadius: 16,
-    padding: 24,
-    marginBottom: 32,
-    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
-    elevation: 2,
+    marginBottom: 24,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   summaryContent: {
     flexDirection: 'row',
@@ -232,35 +212,54 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summaryTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '600',
     marginBottom: 4,
   },
   summarySubtitle: {
-    fontSize: 15,
+    fontSize: 14,
   },
-  habitsSection: {
+  habitsList: {
     gap: 12,
   },
   habitCard: {
+    padding: 16,
     borderRadius: 16,
-    padding: 20,
+    marginBottom: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.08,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
+  },
+  habitHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
-    elevation: 2,
   },
-  habitLeft: {
+  habitInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
-  habitIcon: {
-    fontSize: 32,
-    marginRight: 16,
+  iconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
   },
-  habitInfo: {
+  icon: {
+    fontSize: 24,
+  },
+  habitText: {
     flex: 1,
   },
   habitName: {
@@ -268,49 +267,57 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 2,
   },
-  habitStreak: {
-    fontSize: 14,
+  streak: {
+    fontSize: 13,
   },
   checkButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkmark: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
+  emptyState: {
+    alignItems: 'center',
+    marginTop: 60,
+  },
+  emptyTitle: {
+    fontSize: 20,
+    fontWeight: '600',
+    marginBottom: 8,
+  },
+  emptySubtitle: {
+    fontSize: 15,
+  },
+  fab: {
+    position: 'absolute',
+    bottom: 90,
+    right: 20,
     width: 56,
     height: 56,
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+      },
+      android: {
+        elevation: 6,
+      },
+    }),
   },
-  checkMark: {
-    fontSize: 28,
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 48,
-  },
-  emptyText: {
-    fontSize: 17,
-    marginBottom: 24,
-    textAlign: 'center',
-  },
-  addButton: {
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 32,
-  },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  floatingAddButton: {
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  floatingAddText: {
-    color: '#FFFFFF',
-    fontSize: 17,
-    fontWeight: '600',
+  fabIcon: {
+    color: '#fff',
+    fontSize: 32,
+    fontWeight: '300',
   },
 });
