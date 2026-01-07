@@ -4,15 +4,21 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Habit } from '@/types/habit';
 import { scheduleHabitNotification, cancelHabitNotification } from '@/utils/notifications';
 
+interface Settings {
+  notificationsEnabled: boolean;
+}
+
 interface HabitContextType {
   habits: Habit[];
   loading: boolean;
+  settings: Settings;
   addHabit: (habit: Omit<Habit, 'id' | 'completions' | 'createdAt'>) => Promise<void>;
   updateHabit: (habit: Habit) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
   toggleCompletion: (habitId: string, date: string) => Promise<void>;
   refreshHabits: () => Promise<void>;
-  updateSettings: (settings: any) => Promise<void>;
+  updateSettings: (settings: Partial<Settings>) => Promise<void>;
+  resetAll: () => Promise<void>;
 }
 
 const HabitContext = createContext<HabitContextType | undefined>(undefined);
@@ -22,20 +28,29 @@ const SETTINGS_KEY = '@momentum_settings';
 
 export function HabitProvider({ children }: { children: ReactNode }) {
   const [habits, setHabits] = useState<Habit[]>([]);
+  const [settings, setSettings] = useState<Settings>({ notificationsEnabled: false });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadHabits();
+    loadData();
   }, []);
 
-  const loadHabits = async () => {
+  const loadData = async () => {
     try {
-      const stored = await AsyncStorage.getItem(HABITS_KEY);
-      if (stored) {
-        setHabits(JSON.parse(stored));
+      const [storedHabits, storedSettings] = await Promise.all([
+        AsyncStorage.getItem(HABITS_KEY),
+        AsyncStorage.getItem(SETTINGS_KEY),
+      ]);
+      
+      if (storedHabits) {
+        setHabits(JSON.parse(storedHabits));
+      }
+      
+      if (storedSettings) {
+        setSettings(JSON.parse(storedSettings));
       }
     } catch (error) {
-      console.error('Failed to load habits:', error);
+      console.error('Failed to load data:', error);
     } finally {
       setLoading(false);
     }
@@ -58,7 +73,7 @@ export function HabitProvider({ children }: { children: ReactNode }) {
       createdAt: new Date().toISOString(),
     };
 
-    if (habitData.reminderTime) {
+    if (habitData.reminderTime && settings.notificationsEnabled) {
       await scheduleHabitNotification(newHabit);
     }
 
@@ -69,7 +84,7 @@ export function HabitProvider({ children }: { children: ReactNode }) {
     const updated = habits.map(h => h.id === updatedHabit.id ? updatedHabit : h);
     
     await cancelHabitNotification(updatedHabit.id);
-    if (updatedHabit.reminderTime) {
+    if (updatedHabit.reminderTime && settings.notificationsEnabled) {
       await scheduleHabitNotification(updatedHabit);
     }
 
@@ -95,17 +110,34 @@ export function HabitProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshHabits = async () => {
-    await loadHabits();
+    await loadData();
   };
 
-  const updateSettings = async (settings: any) => {
+  const updateSettings = async (newSettings: Partial<Settings>) => {
     try {
-      const stored = await AsyncStorage.getItem(SETTINGS_KEY);
-      const current = stored ? JSON.parse(stored) : {};
-      const updated = { ...current, ...settings };
+      const updated = { ...settings, ...newSettings };
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
+      setSettings(updated);
     } catch (error) {
       console.error('Failed to update settings:', error);
+    }
+  };
+
+  const resetAll = async () => {
+    try {
+      // Cancel all notifications
+      for (const habit of habits) {
+        await cancelHabitNotification(habit.id);
+      }
+      
+      // Clear storage
+      await AsyncStorage.multiRemove([HABITS_KEY, SETTINGS_KEY]);
+      
+      // Reset state
+      setHabits([]);
+      setSettings({ notificationsEnabled: false });
+    } catch (error) {
+      console.error('Failed to reset data:', error);
     }
   };
 
@@ -113,12 +145,14 @@ export function HabitProvider({ children }: { children: ReactNode }) {
     <HabitContext.Provider value={{
       habits,
       loading,
+      settings,
       addHabit,
       updateHabit,
       deleteHabit,
       toggleCompletion,
       refreshHabits,
       updateSettings,
+      resetAll,
     }}>
       {children}
     </HabitContext.Provider>

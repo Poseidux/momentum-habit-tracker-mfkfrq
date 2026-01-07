@@ -1,10 +1,4 @@
 
-import { useHabits } from '@/contexts/HabitContext';
-import { requestNotificationPermissions, cancelAllHabitNotifications } from '@/utils/notifications';
-import React, { useState } from 'react';
-import * as Haptics from 'expo-haptics';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { colors } from '@/styles/commonStyles';
 import {
   View,
   Text,
@@ -17,55 +11,75 @@ import {
   Platform,
 } from 'react-native';
 import { router } from 'expo-router';
-import { IconSymbol } from '@/components/IconSymbol';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
+import { IconSymbol } from '@/components/IconSymbol';
+import { requestNotificationPermissions, cancelAllHabitNotifications } from '@/utils/notifications';
+import { colors } from '@/styles/commonStyles';
+import React, { useState, useEffect } from 'react';
+import { useHabits } from '@/contexts/HabitContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function SettingsScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? colors.dark : colors.light;
-  const { settings, updateSettings, resetAllData } = useHabits();
-  const [isResetting, setIsResetting] = useState(false);
+  const { settings, updateSettings, resetAll } = useHabits();
+  const { user, signOut } = useAuth();
+  
+  const [notificationsEnabled, setNotificationsEnabled] = useState(settings.notificationsEnabled);
+
+  useEffect(() => {
+    setNotificationsEnabled(settings.notificationsEnabled);
+  }, [settings.notificationsEnabled]);
 
   const handleToggleNotifications = async (value: boolean) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    
     if (value) {
       const granted = await requestNotificationPermissions();
-      if (granted) {
-        await updateSettings({ notificationsEnabled: true });
-      } else {
-        Alert.alert(
-          'Permission Required',
-          'Please enable notifications in your device settings to receive habit reminders.'
-        );
+      if (!granted) {
+        Alert.alert('Permission Denied', 'Please enable notifications in Settings');
+        return;
       }
     } else {
-      await updateSettings({ notificationsEnabled: false });
       await cancelAllHabitNotifications();
     }
-  };
-
-  const handleToggleDarkMode = async (value: boolean) => {
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await updateSettings({ darkMode: value });
+    
+    setNotificationsEnabled(value);
+    await updateSettings({ notificationsEnabled: value });
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   const handleResetData = () => {
     Alert.alert(
       'Reset All Data',
-      'This will permanently delete all your habits and progress. This action cannot be undone.',
+      'This will delete all your habits and progress. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Reset',
           style: 'destructive',
           onPress: async () => {
-            setIsResetting(true);
-            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-            await resetAllData();
-            setIsResetting(false);
-            router.replace('/onboarding');
+            await resetAll();
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleSignOut = async () => {
+    Alert.alert(
+      'Sign Out',
+      'Are you sure you want to sign out?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            await signOut();
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           },
         },
       ]
@@ -73,195 +87,84 @@ export default function SettingsScreen() {
   };
 
   return (
-    <SafeAreaView 
-      style={[styles.container, { backgroundColor: theme.background }]} 
-      edges={['top']}
-    >
-      <ScrollView 
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+      <Animated.View entering={FadeIn} style={styles.header}>
+        <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
+      </Animated.View>
+
+      <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View entering={FadeIn} style={styles.header}>
-          <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
-          <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-            Customize your experience
-          </Text>
-        </Animated.View>
-
-        {/* Preferences Section */}
-        <Animated.View entering={FadeIn.delay(100)}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>
-            Preferences
-          </Text>
-
-          <View 
-            style={[
-              styles.settingsCard,
-              {
-                backgroundColor: theme.card,
-                borderWidth: 1,
-                borderColor: theme.cardBorder,
-              }
-            ]}
-          >
-            <View style={styles.settingItem}>
-              <View style={styles.settingInfo}>
-                <View style={[styles.iconContainer, { backgroundColor: theme.primary + '20' }]}>
-                  <IconSymbol
-                    android_material_icon_name="notifications"
-                    ios_icon_name="bell"
-                    size={22}
-                    color={theme.primary}
-                  />
-                </View>
-                <View style={styles.settingText}>
-                  <Text style={[styles.settingLabel, { color: theme.text }]}>
-                    Notifications
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
-                    Receive habit reminders
-                  </Text>
-                </View>
-              </View>
-              <Switch
-                value={settings.notificationsEnabled}
-                onValueChange={handleToggleNotifications}
-                trackColor={{ false: theme.border, true: theme.primary + '60' }}
-                thumbColor={settings.notificationsEnabled ? theme.primary : '#f4f3f4'}
-              />
-            </View>
-
-            <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-            <View style={styles.settingItem}>
-              <View style={styles.settingInfo}>
-                <View style={[styles.iconContainer, { backgroundColor: theme.primary + '20' }]}>
-                  <IconSymbol
-                    android_material_icon_name={isDark ? 'dark-mode' : 'light-mode'}
-                    ios_icon_name={isDark ? 'moon' : 'sun.max'}
-                    size={22}
-                    color={theme.primary}
-                  />
-                </View>
-                <View style={styles.settingText}>
-                  <Text style={[styles.settingLabel, { color: theme.text }]}>
-                    Dark Mode
-                  </Text>
-                  <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
-                    Use dark theme
-                  </Text>
-                </View>
-              </View>
-              <Switch
-                value={settings.darkMode}
-                onValueChange={handleToggleDarkMode}
-                trackColor={{ false: theme.border, true: theme.primary + '60' }}
-                thumbColor={settings.darkMode ? theme.primary : '#f4f3f4'}
-              />
-            </View>
-          </View>
-        </Animated.View>
-
-        {/* Manage Section */}
-        <Animated.View entering={FadeIn.delay(200)}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>
-            Manage
-          </Text>
-
-          <TouchableOpacity
-            style={[
-              styles.actionCard,
-              {
-                backgroundColor: theme.card,
-                borderWidth: 1,
-                borderColor: theme.cardBorder,
-              }
-            ]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push('/manage-habits');
-            }}
-            activeOpacity={0.7}
-          >
-            <View style={styles.actionInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: theme.primary + '20' }]}>
-                <IconSymbol
-                  android_material_icon_name="edit"
-                  ios_icon_name="pencil"
-                  size={22}
-                  color={theme.primary}
-                />
-              </View>
-              <View style={styles.actionText}>
-                <Text style={[styles.actionLabel, { color: theme.text }]}>
-                  Manage Habits
-                </Text>
-                <Text style={[styles.actionDescription, { color: theme.textSecondary }]}>
-                  Edit or delete your habits
-                </Text>
+        {user && (
+          <Animated.View entering={FadeInDown.delay(100)} style={[styles.section, { backgroundColor: theme.card }]}>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Account</Text>
+            <View style={styles.accountInfo}>
+              <IconSymbol ios_icon_name="person.circle.fill" android_material_icon_name="account-circle" size={48} color={theme.accent} />
+              <View style={styles.accountText}>
+                <Text style={[styles.accountName, { color: theme.text }]}>{user.name || 'User'}</Text>
+                <Text style={[styles.accountEmail, { color: theme.textSecondary }]}>{user.email}</Text>
               </View>
             </View>
-            <IconSymbol
-              android_material_icon_name="chevron-right"
-              ios_icon_name="chevron.right"
-              size={24}
-              color={theme.textSecondary}
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: theme.border }]}
+              onPress={handleSignOut}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.buttonText, { color: theme.text }]}>Sign Out</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
+
+        <Animated.View entering={FadeInDown.delay(200)} style={[styles.section, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Preferences</Text>
+          
+          <View style={styles.settingRow}>
+            <View style={styles.settingLeft}>
+              <IconSymbol ios_icon_name="bell.fill" android_material_icon_name="notifications" size={20} color={theme.text} />
+              <Text style={[styles.settingLabel, { color: theme.text }]}>Notifications</Text>
+            </View>
+            <Switch
+              value={notificationsEnabled}
+              onValueChange={handleToggleNotifications}
+              trackColor={{ false: theme.border, true: theme.accent }}
+              thumbColor={notificationsEnabled ? '#fff' : '#f4f3f4'}
+              ios_backgroundColor={theme.border}
             />
-          </TouchableOpacity>
-        </Animated.View>
+          </View>
 
-        {/* Danger Zone */}
-        <Animated.View entering={FadeIn.delay(300)}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>
-            Danger Zone
-          </Text>
+          <View style={[styles.divider, { backgroundColor: theme.border }]} />
 
           <TouchableOpacity
-            style={[
-              styles.dangerCard,
-              {
-                backgroundColor: theme.card,
-                borderWidth: 1.5,
-                borderColor: colors.light.error + '40',
-              }
-            ]}
-            onPress={handleResetData}
-            disabled={isResetting}
+            style={styles.settingRow}
+            onPress={() => router.push('/manage-habits')}
             activeOpacity={0.7}
           >
-            <View style={styles.actionInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: colors.light.error + '15' }]}>
-                <IconSymbol
-                  android_material_icon_name="delete"
-                  ios_icon_name="trash"
-                  size={22}
-                  color={colors.light.error}
-                />
-              </View>
-              <View style={styles.actionText}>
-                <Text style={[styles.actionLabel, { color: colors.light.error }]}>
-                  Reset All Data
-                </Text>
-                <Text style={[styles.actionDescription, { color: theme.textSecondary }]}>
-                  Permanently delete all habits
-                </Text>
-              </View>
+            <View style={styles.settingLeft}>
+              <IconSymbol ios_icon_name="list.bullet" android_material_icon_name="list" size={20} color={theme.text} />
+              <Text style={[styles.settingLabel, { color: theme.text }]}>Manage Habits</Text>
             </View>
+            <IconSymbol ios_icon_name="chevron.right" android_material_icon_name="chevron-right" size={16} color={theme.textSecondary} />
           </TouchableOpacity>
         </Animated.View>
 
-        {/* App Info */}
-        <Animated.View entering={FadeIn.delay(400)} style={styles.appInfo}>
-          <Text style={[styles.appInfoText, { color: theme.textSecondary }]}>
-            Momentum v1.0.0
-          </Text>
-          <Text style={[styles.appInfoText, { color: theme.textTertiary }]}>
-            Built with ❤️ for better habits
-          </Text>
+        <Animated.View entering={FadeInDown.delay(300)} style={[styles.section, { backgroundColor: theme.card }]}>
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>Data</Text>
+          
+          <TouchableOpacity
+            style={[styles.button, styles.dangerButton]}
+            onPress={handleResetData}
+            activeOpacity={0.7}
+          >
+            <IconSymbol ios_icon_name="trash.fill" android_material_icon_name="delete" size={18} color="#fff" />
+            <Text style={styles.dangerButtonText}>Reset All Data</Text>
+          </TouchableOpacity>
         </Animated.View>
 
-        <View style={{ height: 100 }} />
+        <View style={styles.footer}>
+          <Text style={[styles.footerText, { color: theme.textSecondary }]}>Momentum v1.0.0</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -271,147 +174,110 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  header: {
+    paddingHorizontal: 24,
+    paddingTop: 16,
+    paddingBottom: 24,
+  },
+  title: {
+    fontSize: 34,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: 24,
+    paddingBottom: 120,
   },
-  header: {
-    marginBottom: 28,
-  },
-  title: {
-    fontSize: 36,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-    marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 32,
-    marginBottom: 16,
-  },
-  settingsCard: {
+  section: {
     borderRadius: 16,
-    overflow: 'hidden',
+    padding: 20,
+    marginBottom: 16,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
       },
       android: {
-        elevation: 3,
-      },
-      web: {
-        boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
+        elevation: 2,
       },
     }),
   },
-  settingItem: {
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 16,
+    opacity: 0.6,
+  },
+  accountInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+    gap: 12,
+  },
+  accountText: {
+    flex: 1,
+  },
+  accountName: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  accountEmail: {
+    fontSize: 14,
+  },
+  settingRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 16,
+    paddingVertical: 12,
   },
-  settingInfo: {
+  settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
-  },
-  iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  settingText: {
+    gap: 12,
     flex: 1,
   },
   settingLabel: {
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  settingDescription: {
-    fontSize: 14,
+    fontSize: 16,
+    fontWeight: '500',
   },
   divider: {
     height: 1,
-    marginLeft: 76,
+    marginVertical: 8,
   },
-  actionCard: {
-    flexDirection: 'row',
+  button: {
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 16,
-    marginBottom: 12,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 3,
-      },
-      web: {
-        boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
-      },
-    }),
+    justifyContent: 'center',
   },
-  dangerCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 16,
-    borderRadius: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 3,
-      },
-      web: {
-        boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
-      },
-    }),
-  },
-  actionInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  actionText: {
-    flex: 1,
-  },
-  actionLabel: {
-    fontSize: 17,
+  buttonText: {
+    fontSize: 16,
     fontWeight: '600',
-    marginBottom: 2,
   },
-  actionDescription: {
-    fontSize: 14,
+  dangerButton: {
+    backgroundColor: '#FF3B30',
+    flexDirection: 'row',
+    gap: 8,
   },
-  appInfo: {
+  dangerButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  footer: {
     alignItems: 'center',
-    marginTop: 48,
-    gap: 4,
+    paddingVertical: 24,
   },
-  appInfoText: {
-    fontSize: 14,
+  footerText: {
+    fontSize: 13,
   },
 });
