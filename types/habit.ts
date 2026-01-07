@@ -4,6 +4,7 @@ export interface Habit {
   name: string;
   color: string;
   icon: string;
+  customIconUri?: string; // For Premium users
   schedule: 'daily' | 'specific';
   scheduledDays?: number[]; // 0 = Sunday, 1 = Monday, etc.
   reminderTime?: string; // HH:MM format

@@ -8,6 +8,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { HabitProvider, useHabits } from '@/contexts/HabitContext';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { SuperwallWrapper, PremiumProvider } from '@/contexts/PremiumContext';
 import { colors } from '@/styles/commonStyles';
 
 SplashScreen.preventAutoHideAsync();
@@ -81,11 +82,15 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <AuthProvider>
-          <HabitProvider>
-            <RootLayoutContent />
-          </HabitProvider>
-        </AuthProvider>
+        <SuperwallWrapper>
+          <AuthProvider>
+            <PremiumProvider>
+              <HabitProvider>
+                <RootLayoutContent />
+              </HabitProvider>
+            </PremiumProvider>
+          </AuthProvider>
+        </SuperwallWrapper>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

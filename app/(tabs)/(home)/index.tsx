@@ -8,10 +8,10 @@ import {
   calculateStreak,
 } from '@/utils/habitUtils';
 import * as Haptics from 'expo-haptics';
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, withSpring, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/styles/commonStyles';
-import { ProgressRing } from '@/components/ProgressRing';
+import { LinearGradient } from 'expo-linear-gradient';
 import {
   View,
   Text,
@@ -20,11 +20,111 @@ import {
   ScrollView,
   useColorScheme,
   Platform,
+  Image,
 } from 'react-native';
 import { router } from 'expo-router';
 import { IconSymbol } from '@/components/IconSymbol';
 import { useAuth } from '@/contexts/AuthContext';
 import { authenticatedGet, authenticatedPost } from '@/utils/api';
+
+// Futuristic Completion Ring Component
+function FuturisticCompletionRing({ progress, size = 120 }: { progress: number; size?: number }) {
+  const scheme = useColorScheme();
+  const isDark = scheme === 'dark';
+  const theme = isDark ? colors.dark : colors.light;
+  
+  const scale = useSharedValue(1);
+  const rotation = useSharedValue(0);
+
+  useEffect(() => {
+    if (progress === 100) {
+      scale.value = withSequence(
+        withSpring(1.1, { damping: 8 }),
+        withSpring(1, { damping: 10 })
+      );
+      rotation.value = withTiming(360, { duration: 800 });
+    }
+  }, [progress]);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      { scale: scale.value },
+      { rotate: `${rotation.value}deg` },
+    ],
+  }));
+
+  const radius = (size - 12) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const strokeDashoffset = circumference - (progress / 100) * circumference;
+
+  return (
+    <Animated.View style={[styles.completionRingContainer, animatedStyle]}>
+      {/* Outer glow effect */}
+      {progress === 100 && (
+        <View style={[styles.glowOuter, { width: size + 20, height: size + 20 }]}>
+          <LinearGradient
+            colors={[theme.primary + '40', theme.primary + '00']}
+            style={StyleSheet.absoluteFill}
+            start={{ x: 0.5, y: 0.5 }}
+            end={{ x: 1, y: 1 }}
+          />
+        </View>
+      )}
+      
+      {/* Main ring container */}
+      <View style={[styles.ringContent, { width: size, height: size }]}>
+        {/* Background ring */}
+        <View style={[styles.backgroundRing, { width: size, height: size, borderRadius: size / 2, borderColor: theme.border }]} />
+        
+        {/* Progress ring with gradient */}
+        <View style={[styles.progressRing, { width: size, height: size }]}>
+          <svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
+            <circle
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              stroke={theme.primary}
+              strokeWidth={12}
+              fill="none"
+              strokeDasharray={`${circumference} ${circumference}`}
+              strokeDashoffset={strokeDashoffset}
+              strokeLinecap="round"
+              style={{
+                filter: progress === 100 ? `drop-shadow(0 0 8px ${theme.primary})` : 'none',
+              }}
+            />
+          </svg>
+        </View>
+
+        {/* Center content */}
+        <View style={styles.centerContent}>
+          {progress === 100 ? (
+            <>
+              <IconSymbol
+                android_material_icon_name="check-circle"
+                ios_icon_name="checkmark.circle.fill"
+                size={36}
+                color={theme.primary}
+              />
+              <Text style={[styles.completionText, { color: theme.primary }]}>
+                Perfect!
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text style={[styles.progressNumber, { color: theme.text }]}>
+                {Math.round(progress)}%
+              </Text>
+              <Text style={[styles.progressLabel, { color: theme.textSecondary }]}>
+                Complete
+              </Text>
+            </>
+          )}
+        </View>
+      </View>
+    </Animated.View>
+  );
+}
 
 export default function TodayScreen() {
   const scheme = useColorScheme();
@@ -141,13 +241,7 @@ export default function TodayScreen() {
                   {progress === 100 ? "Perfect day! 🎉" : "habits completed"}
                 </Text>
               </View>
-              <ProgressRing 
-                progress={progress} 
-                size={72} 
-                strokeWidth={8}
-                color={theme.primary}
-                backgroundColor={theme.border}
-              />
+              <FuturisticCompletionRing progress={progress} size={90} />
             </View>
           </Animated.View>
         )}
@@ -178,7 +272,11 @@ export default function TodayScreen() {
                   <View style={styles.habitHeader}>
                     <View style={styles.habitInfo}>
                       <View style={[styles.iconCircle, { backgroundColor: habit.color + '15' }]}>
-                        <Text style={styles.icon}>{habit.icon}</Text>
+                        {habit.customIconUri ? (
+                          <Image source={{ uri: habit.customIconUri }} style={styles.customIcon} />
+                        ) : (
+                          <Text style={styles.icon}>{habit.icon}</Text>
+                        )}
                       </View>
                       <View style={styles.habitText}>
                         <Text style={[styles.habitName, { color: theme.text }]}>
@@ -314,6 +412,43 @@ const styles = StyleSheet.create({
   summarySubtitle: {
     fontSize: 15,
   },
+  completionRingContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  glowOuter: {
+    position: 'absolute',
+    borderRadius: 999,
+  },
+  ringContent: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  backgroundRing: {
+    position: 'absolute',
+    borderWidth: 12,
+  },
+  progressRing: {
+    position: 'absolute',
+  },
+  centerContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  progressNumber: {
+    fontSize: 24,
+    fontWeight: '700',
+  },
+  progressLabel: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  completionText: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 4,
+  },
   habitsList: {
     gap: 12,
   },
@@ -353,9 +488,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+    overflow: 'hidden',
   },
   icon: {
     fontSize: 26,
+  },
+  customIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
   },
   habitText: {
     flex: 1,

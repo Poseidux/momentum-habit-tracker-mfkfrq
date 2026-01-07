@@ -12,13 +12,17 @@ import {
   useColorScheme,
   Platform,
   Alert,
+  Image,
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { Habit } from '@/types/habit';
 import { IconSymbol } from '@/components/IconSymbol';
+import { usePremium } from '@/contexts/PremiumContext';
+import { PaywallModal } from '@/components/PaywallModal';
 
 const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -26,7 +30,8 @@ export default function AddHabitScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? colors.dark : colors.light;
-  const { addHabit } = useHabits();
+  const { addHabit, habits } = useHabits();
+  const { isPremium } = usePremium();
 
   const [name, setName] = useState('');
   const [schedule, setSchedule] = useState<'daily' | 'specific'>('daily');
@@ -36,6 +41,8 @@ export default function AddHabitScreen() {
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [selectedColor, setSelectedColor] = useState(habitColors[0]);
   const [selectedIcon, setSelectedIcon] = useState(habitIcons[0]);
+  const [customIconUri, setCustomIconUri] = useState<string | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   const toggleDay = (day: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -44,7 +51,44 @@ export default function AddHabitScreen() {
     );
   };
 
+  const handlePickCustomIcon = async () => {
+    if (!isPremium) {
+      Alert.alert(
+        'Premium Feature',
+        'Custom icons are available for Premium users only.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission Required', 'Please grant photo library access to upload custom icons.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setCustomIconUri(result.assets[0].uri);
+      setSelectedIcon(''); // Clear emoji selection
+    }
+  };
+
   const handleSave = async () => {
+    // Check habit limit for free users
+    if (!isPremium && habits.length >= 3) {
+      setShowPaywall(true);
+      return;
+    }
+
     if (!name.trim()) {
       Alert.alert('Error', 'Please enter a habit name');
       return;
@@ -61,7 +105,8 @@ export default function AddHabitScreen() {
       id: Date.now().toString(),
       name: name.trim(),
       color: selectedColor,
-      icon: selectedIcon,
+      icon: customIconUri || selectedIcon,
+      customIconUri: customIconUri || undefined,
       schedule,
       scheduledDays: schedule === 'specific' ? selectedDays : undefined,
       reminderTime: reminderEnabled
@@ -284,7 +329,46 @@ export default function AddHabitScreen() {
 
         {/* Icon */}
         <View style={styles.section}>
-          <Text style={[styles.label, { color: theme.text }]}>Icon</Text>
+          <View style={styles.iconHeader}>
+            <Text style={[styles.label, { color: theme.text }]}>Icon</Text>
+            {isPremium && (
+              <TouchableOpacity
+                style={[styles.uploadButton, { backgroundColor: theme.primary + '15', borderColor: theme.primary }]}
+                onPress={handlePickCustomIcon}
+              >
+                <IconSymbol
+                  android_material_icon_name="photo-library"
+                  ios_icon_name="photo"
+                  size={16}
+                  color={theme.primary}
+                />
+                <Text style={[styles.uploadButtonText, { color: theme.primary }]}>
+                  Upload Custom
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
+          {customIconUri && (
+            <View style={styles.customIconPreview}>
+              <Image source={{ uri: customIconUri }} style={styles.customIconImage} />
+              <TouchableOpacity
+                style={[styles.removeCustomIcon, { backgroundColor: theme.error }]}
+                onPress={() => {
+                  setCustomIconUri(null);
+                  setSelectedIcon(habitIcons[0]);
+                }}
+              >
+                <IconSymbol
+                  android_material_icon_name="close"
+                  ios_icon_name="xmark"
+                  size={12}
+                  color="#FFFFFF"
+                />
+              </TouchableOpacity>
+            </View>
+          )}
+
           <View style={styles.iconGrid}>
             {habitIcons.map((icon) => (
               <TouchableOpacity
@@ -293,13 +377,14 @@ export default function AddHabitScreen() {
                   styles.iconOption,
                   {
                     backgroundColor: theme.card,
-                    borderColor: selectedIcon === icon ? theme.primary : theme.border,
-                    borderWidth: selectedIcon === icon ? 2 : 1,
+                    borderColor: selectedIcon === icon && !customIconUri ? theme.primary : theme.border,
+                    borderWidth: selectedIcon === icon && !customIconUri ? 2 : 1,
                   }
                 ]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   setSelectedIcon(icon);
+                  setCustomIconUri(null);
                 }}
               >
                 <Text style={styles.iconText}>{icon}</Text>
@@ -318,6 +403,8 @@ export default function AddHabitScreen() {
           <Text style={styles.saveButtonText}>Save Habit</Text>
         </TouchableOpacity>
       </View>
+
+      <PaywallModal visible={showPaywall} onClose={() => setShowPaywall(false)} />
     </SafeAreaView>
   );
 }
@@ -430,6 +517,45 @@ const styles = StyleSheet.create({
   colorOptionSelected: {
     borderWidth: 3,
     borderColor: '#FFFFFF',
+  },
+  iconHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+  },
+  uploadButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  customIconPreview: {
+    alignSelf: 'flex-start',
+    marginBottom: 16,
+    position: 'relative',
+  },
+  customIconImage: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+  },
+  removeCustomIcon: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   iconGrid: {
     flexDirection: 'row',
