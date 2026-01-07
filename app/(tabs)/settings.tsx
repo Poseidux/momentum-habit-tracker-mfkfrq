@@ -12,57 +12,67 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import { colors } from '@/styles/commonStyles';
 import { useHabits } from '@/contexts/HabitContext';
 import { requestNotificationPermissions, cancelAllHabitNotifications } from '@/utils/notifications';
+import { router } from 'expo-router';
 
 export default function SettingsScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? colors.dark : colors.light;
 
-  const { settings, updateSettings, resetAllData, habits } = useHabits();
-  const [isResetting, setIsResetting] = useState(false);
+  const { settings, updateSettings, resetAllData } = useHabits();
+  const [notificationsEnabled, setNotificationsEnabled] = useState(settings.notificationsEnabled);
+  const [darkModeEnabled, setDarkModeEnabled] = useState(settings.darkMode);
 
   const handleToggleNotifications = async (value: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
     if (value) {
       const granted = await requestNotificationPermissions();
       if (granted) {
+        setNotificationsEnabled(true);
         await updateSettings({ notificationsEnabled: true });
       } else {
         Alert.alert(
-          'Permission Denied',
-          'Please enable notifications in your device settings to receive reminders.'
+          'Notifications Disabled',
+          'Please enable notifications in your device settings to receive habit reminders.'
         );
       }
     } else {
-      await cancelAllHabitNotifications();
+      setNotificationsEnabled(false);
       await updateSettings({ notificationsEnabled: false });
+      await cancelAllHabitNotifications();
     }
   };
 
   const handleToggleDarkMode = async (value: boolean) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setDarkModeEnabled(value);
     await updateSettings({ darkMode: value });
   };
 
   const handleResetData = () => {
     Alert.alert(
       'Reset All Data',
-      'This will delete all your habits and progress. This action cannot be undone.',
+      'Are you sure you want to reset all data? This will delete all your habits and progress. This action cannot be undone.',
       [
         {
           text: 'Cancel',
           style: 'cancel',
+          onPress: () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          },
         },
         {
           text: 'Reset',
           style: 'destructive',
           onPress: async () => {
-            setIsResetting(true);
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             await resetAllData();
-            setIsResetting(false);
-            router.replace('/onboarding');
+            Alert.alert('Success', 'All data has been reset.');
           },
         },
       ]
@@ -80,55 +90,63 @@ export default function SettingsScreen() {
           <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
         </View>
 
-        {/* User Info */}
-        {settings.name && (
-          <View style={[styles.card, { backgroundColor: theme.card }]}>
-            <Text style={[styles.greeting, { color: theme.text }]}>
-              Hello, {settings.name}! 👋
-            </Text>
-          </View>
-        )}
-
-        {/* Preferences */}
-        <View style={[styles.card, { backgroundColor: theme.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Preferences</Text>
+        {/* Habits Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>HABITS</Text>
           
-          <View style={styles.settingItem}>
+          <TouchableOpacity
+            style={[styles.settingCard, { backgroundColor: theme.card }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/manage-habits');
+            }}
+          >
+            <View style={styles.settingLeft}>
+              <Text style={styles.settingIcon}>📝</Text>
+              <Text style={[styles.settingText, { color: theme.text }]}>Manage Habits</Text>
+            </View>
+            <Text style={[styles.arrow, { color: theme.textSecondary }]}>›</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.settingCard, { backgroundColor: theme.card }]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/add-habit');
+            }}
+          >
+            <View style={styles.settingLeft}>
+              <Text style={styles.settingIcon}>➕</Text>
+              <Text style={[styles.settingText, { color: theme.text }]}>Add New Habit</Text>
+            </View>
+            <Text style={[styles.arrow, { color: theme.textSecondary }]}>›</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Preferences Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>PREFERENCES</Text>
+          
+          <View style={[styles.settingCard, { backgroundColor: theme.card }]}>
             <View style={styles.settingLeft}>
               <Text style={styles.settingIcon}>🔔</Text>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.text }]}>
-                  Notifications
-                </Text>
-                <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
-                  Daily reminders for your habits
-                </Text>
-              </View>
+              <Text style={[styles.settingText, { color: theme.text }]}>Notifications</Text>
             </View>
             <Switch
-              value={settings.notificationsEnabled}
+              value={notificationsEnabled}
               onValueChange={handleToggleNotifications}
               trackColor={{ false: theme.highlight, true: theme.primary }}
               thumbColor="#FFFFFF"
             />
           </View>
 
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-          <View style={styles.settingItem}>
+          <View style={[styles.settingCard, { backgroundColor: theme.card }]}>
             <View style={styles.settingLeft}>
               <Text style={styles.settingIcon}>🌙</Text>
-              <View style={styles.settingInfo}>
-                <Text style={[styles.settingLabel, { color: theme.text }]}>
-                  Dark Mode
-                </Text>
-                <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
-                  Use dark theme
-                </Text>
-              </View>
+              <Text style={[styles.settingText, { color: theme.text }]}>Dark Mode</Text>
             </View>
             <Switch
-              value={settings.darkMode || isDark}
+              value={darkModeEnabled}
               onValueChange={handleToggleDarkMode}
               trackColor={{ false: theme.highlight, true: theme.primary }}
               thumbColor="#FFFFFF"
@@ -136,69 +154,28 @@ export default function SettingsScreen() {
           </View>
         </View>
 
-        {/* Stats */}
-        <View style={[styles.card, { backgroundColor: theme.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Your Stats</Text>
-          
-          <View style={styles.statRow}>
-            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-              Total Habits
-            </Text>
-            <Text style={[styles.statValue, { color: theme.text }]}>
-              {habits.length}
-            </Text>
-          </View>
-
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-          <View style={styles.statRow}>
-            <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-              Total Completions
-            </Text>
-            <Text style={[styles.statValue, { color: theme.text }]}>
-              {habits.reduce((sum, h) => sum + h.completions.length, 0)}
-            </Text>
-          </View>
-        </View>
-
-        {/* Manage Habits */}
-        <View style={[styles.card, { backgroundColor: theme.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Manage</Text>
+        {/* Data Section */}
+        <View style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>DATA</Text>
           
           <TouchableOpacity
-            style={styles.actionButton}
-            onPress={() => router.push('/manage-habits')}
-          >
-            <Text style={styles.actionIcon}>✏️</Text>
-            <Text style={[styles.actionLabel, { color: theme.text }]}>
-              Edit Habits
-            </Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Danger Zone */}
-        <View style={[styles.card, { backgroundColor: theme.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.error }]}>Danger Zone</Text>
-          
-          <TouchableOpacity
-            style={styles.actionButton}
+            style={[styles.settingCard, { backgroundColor: theme.card }]}
             onPress={handleResetData}
-            disabled={isResetting}
           >
-            <Text style={styles.actionIcon}>🗑️</Text>
-            <Text style={[styles.actionLabel, { color: theme.error }]}>
-              {isResetting ? 'Resetting...' : 'Reset All Data'}
-            </Text>
+            <View style={styles.settingLeft}>
+              <Text style={styles.settingIcon}>🗑️</Text>
+              <Text style={[styles.settingText, { color: theme.error }]}>Reset All Data</Text>
+            </View>
           </TouchableOpacity>
         </View>
 
         {/* App Info */}
-        <View style={styles.footer}>
-          <Text style={[styles.footerText, { color: theme.textSecondary }]}>
-            Momentum v1.0
+        <View style={styles.appInfo}>
+          <Text style={[styles.appInfoText, { color: theme.textSecondary }]}>
+            Momentum v1.0.0
           </Text>
-          <Text style={[styles.footerText, { color: theme.textSecondary }]}>
-            Made with ❤️ for building better habits
+          <Text style={[styles.appInfoText, { color: theme.textSecondary }]}>
+            Build better habits, one day at a time
           </Text>
         </View>
       </ScrollView>
@@ -216,34 +193,30 @@ const styles = StyleSheet.create({
     paddingBottom: 120,
   },
   header: {
-    marginBottom: 24,
+    marginBottom: 32,
   },
   title: {
     fontSize: 32,
     fontWeight: '700',
   },
-  card: {
-    borderRadius: 16,
-    padding: 24,
-    marginBottom: 16,
-    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
-    elevation: 2,
-  },
-  greeting: {
-    fontSize: 20,
-    fontWeight: '600',
-    textAlign: 'center',
+  section: {
+    marginBottom: 32,
   },
   sectionTitle: {
-    fontSize: 17,
+    fontSize: 13,
     fontWeight: '600',
-    marginBottom: 16,
+    marginBottom: 12,
+    letterSpacing: 0.5,
   },
-  settingItem: {
+  settingCard: {
+    borderRadius: 16,
+    padding: 20,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    marginBottom: 12,
+    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.06)',
+    elevation: 2,
   },
   settingLeft: {
     flexDirection: 'row',
@@ -254,54 +227,20 @@ const styles = StyleSheet.create({
     fontSize: 24,
     marginRight: 16,
   },
-  settingInfo: {
-    flex: 1,
-  },
-  settingLabel: {
-    fontSize: 17,
-    fontWeight: '500',
-    marginBottom: 2,
-  },
-  settingDescription: {
-    fontSize: 14,
-  },
-  divider: {
-    height: 1,
-    marginVertical: 16,
-  },
-  statRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  statLabel: {
-    fontSize: 17,
-  },
-  statValue: {
+  settingText: {
     fontSize: 17,
     fontWeight: '600',
   },
-  actionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  actionIcon: {
+  arrow: {
     fontSize: 24,
-    marginRight: 16,
+    fontWeight: '300',
   },
-  actionLabel: {
-    fontSize: 17,
-    fontWeight: '500',
-  },
-  footer: {
+  appInfo: {
     alignItems: 'center',
     paddingVertical: 24,
-    gap: 8,
   },
-  footerText: {
+  appInfoText: {
     fontSize: 14,
-    textAlign: 'center',
+    marginBottom: 4,
   },
 });

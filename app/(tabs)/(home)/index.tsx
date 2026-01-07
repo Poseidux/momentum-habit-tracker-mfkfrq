@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
+import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, ScaleIn } from 'react-native-reanimated';
 import { colors } from '@/styles/commonStyles';
 import { useHabits } from '@/contexts/HabitContext';
@@ -39,6 +40,8 @@ export default function TodayScreen() {
   const progress = totalCount > 0 ? Math.round((completedCount / totalCount) * 100) : 0;
 
   const handleToggleCompletion = async (habitId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
     const habit = habits.find(h => h.id === habitId);
     if (!habit) {
       return;
@@ -47,6 +50,11 @@ export default function TodayScreen() {
     const updated = toggleHabitCompletion(habit, todayString);
     await updateHabit(updated);
     setRefreshKey(prev => prev + 1);
+  };
+
+  const handleEditHabit = (habitId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push(`/edit-habit?id=${habitId}`);
   };
 
   const formatDate = (date: Date) => {
@@ -108,7 +116,10 @@ export default function TodayScreen() {
               </Text>
               <TouchableOpacity
                 style={[styles.addButton, { backgroundColor: theme.primary }]}
-                onPress={() => router.push('/add-habit')}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  router.push('/add-habit');
+                }}
               >
                 <Text style={styles.addButtonText}>Add Your First Habit</Text>
               </TouchableOpacity>
@@ -133,6 +144,7 @@ export default function TodayScreen() {
                       },
                     ]}
                     onPress={() => handleToggleCompletion(habit.id)}
+                    onLongPress={() => handleEditHabit(habit.id)}
                     activeOpacity={0.7}
                   >
                     <View style={styles.habitLeft}>
@@ -170,7 +182,10 @@ export default function TodayScreen() {
         {todayHabits.length > 0 && (
           <TouchableOpacity
             style={[styles.floatingAddButton, { backgroundColor: theme.primary }]}
-            onPress={() => router.push('/add-habit')}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push('/add-habit');
+            }}
           >
             <Text style={styles.floatingAddText}>+ Add Habit</Text>
           </TouchableOpacity>

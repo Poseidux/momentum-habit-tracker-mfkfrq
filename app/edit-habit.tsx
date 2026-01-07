@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { Stack, router } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
@@ -29,12 +29,15 @@ const DAYS_OF_WEEK = [
   { label: 'Sun', value: 0, name: 'Sunday' },
 ];
 
-export default function AddHabitScreen() {
+export default function EditHabitScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? colors.dark : colors.light;
 
-  const { addHabit } = useHabits();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { habits, updateHabit, deleteHabit } = useHabits();
+
+  const habit = habits.find(h => h.id === id);
 
   const [name, setName] = useState('');
   const [selectedColor, setSelectedColor] = useState(habitColors[0]);
@@ -45,6 +48,44 @@ export default function AddHabitScreen() {
   const [reminderTime, setReminderTime] = useState(new Date());
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [validationError, setValidationError] = useState('');
+
+  useEffect(() => {
+    if (habit) {
+      setName(habit.name);
+      setSelectedColor(habit.color);
+      setSelectedIcon(habit.icon);
+      setSchedule(habit.schedule);
+      setSelectedDays(new Set(habit.scheduledDays || [0, 1, 2, 3, 4, 5, 6]));
+      setHasReminder(!!habit.reminderTime);
+      
+      if (habit.reminderTime) {
+        const [hours, minutes] = habit.reminderTime.split(':').map(Number);
+        const time = new Date();
+        time.setHours(hours);
+        time.setMinutes(minutes);
+        setReminderTime(time);
+      }
+    }
+  }, [habit]);
+
+  if (!habit) {
+    return (
+      <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+        <Stack.Screen
+          options={{
+            headerShown: true,
+            title: 'Edit Habit',
+            headerStyle: { backgroundColor: theme.background },
+            headerTintColor: theme.text,
+            headerShadowVisible: false,
+          }}
+        />
+        <View style={styles.centered}>
+          <Text style={[styles.errorText, { color: theme.text }]}>Habit not found</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   const toggleDay = (day: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -75,8 +116,8 @@ export default function AddHabitScreen() {
     // Success haptic
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    const habit: Habit = {
-      id: `habit-${Date.now()}`,
+    const updatedHabit: Habit = {
+      ...habit,
       name: name.trim(),
       color: selectedColor,
       icon: selectedIcon,
@@ -85,12 +126,35 @@ export default function AddHabitScreen() {
       reminderTime: hasReminder
         ? `${reminderTime.getHours().toString().padStart(2, '0')}:${reminderTime.getMinutes().toString().padStart(2, '0')}`
         : undefined,
-      completions: [],
-      createdAt: new Date().toISOString(),
     };
 
-    await addHabit(habit);
+    await updateHabit(updatedHabit);
     router.back();
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      'Delete Habit',
+      `Are you sure you want to delete "${habit.name}"? This action cannot be undone.`,
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          },
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            await deleteHabit(habit.id);
+            router.back();
+          },
+        },
+      ]
+    );
   };
 
   const isFormValid = name.trim() && (schedule === 'daily' || selectedDays.size > 0);
@@ -100,7 +164,7 @@ export default function AddHabitScreen() {
       <Stack.Screen
         options={{
           headerShown: true,
-          title: 'Add Habit',
+          title: 'Edit Habit',
           headerStyle: { backgroundColor: theme.background },
           headerTintColor: theme.text,
           headerShadowVisible: false,
@@ -139,7 +203,6 @@ export default function AddHabitScreen() {
               setName(text);
               setValidationError('');
             }}
-            autoFocus
             maxLength={50}
           />
         </View>
@@ -336,6 +399,14 @@ export default function AddHabitScreen() {
             ))}
           </View>
         </View>
+
+        {/* Delete Button */}
+        <TouchableOpacity
+          style={[styles.deleteButton, { backgroundColor: theme.error + '20', borderColor: theme.error }]}
+          onPress={handleDelete}
+        >
+          <Text style={[styles.deleteButtonText, { color: theme.error }]}>Delete Habit</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Sticky Save Button */}
@@ -351,7 +422,7 @@ export default function AddHabitScreen() {
           disabled={!isFormValid}
         >
           <Text style={[styles.saveButtonText, { opacity: isFormValid ? 1 : 0.5 }]}>
-            Save Habit
+            Save Changes
           </Text>
         </TouchableOpacity>
       </View>
@@ -362,6 +433,11 @@ export default function AddHabitScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  centered: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   scrollContent: {
     paddingHorizontal: 24,
@@ -470,6 +546,17 @@ const styles = StyleSheet.create({
   },
   iconText: {
     fontSize: 28,
+  },
+  deleteButton: {
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  deleteButtonText: {
+    fontSize: 17,
+    fontWeight: '600',
   },
   bottomBar: {
     position: 'absolute',
