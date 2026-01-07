@@ -1,112 +1,125 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Habit, UserSettings } from '@/types/habit';
-import { storage } from '@/utils/storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Habit } from '@/types/habit';
 import { scheduleHabitNotification, cancelHabitNotification } from '@/utils/notifications';
 
 interface HabitContextType {
   habits: Habit[];
-  settings: UserSettings;
   loading: boolean;
-  addHabit: (habit: Habit) => Promise<void>;
+  addHabit: (habit: Omit<Habit, 'id' | 'completions' | 'createdAt'>) => Promise<void>;
   updateHabit: (habit: Habit) => Promise<void>;
-  deleteHabit: (habitId: string) => Promise<void>;
-  updateSettings: (settings: Partial<UserSettings>) => Promise<void>;
-  resetAllData: () => Promise<void>;
+  deleteHabit: (id: string) => Promise<void>;
+  toggleCompletion: (habitId: string, date: string) => Promise<void>;
   refreshHabits: () => Promise<void>;
+  updateSettings: (settings: any) => Promise<void>;
 }
 
 const HabitContext = createContext<HabitContextType | undefined>(undefined);
 
+const HABITS_KEY = '@momentum_habits';
+const SETTINGS_KEY = '@momentum_settings';
+
 export function HabitProvider({ children }: { children: ReactNode }) {
   const [habits, setHabits] = useState<Habit[]>([]);
-  const [settings, setSettings] = useState<UserSettings>({
-    notificationsEnabled: false,
-    darkMode: false,
-    hasCompletedOnboarding: false,
-  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadData();
+    loadHabits();
   }, []);
 
-  async function loadData() {
+  const loadHabits = async () => {
     try {
-      const [loadedHabits, loadedSettings] = await Promise.all([
-        storage.getHabits(),
-        storage.getSettings(),
-      ]);
-      setHabits(loadedHabits);
-      setSettings(loadedSettings);
+      const stored = await AsyncStorage.getItem(HABITS_KEY);
+      if (stored) {
+        setHabits(JSON.parse(stored));
+      }
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('Failed to load habits:', error);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  async function addHabit(habit: Habit) {
-    await storage.addHabit(habit);
-    setHabits(prev => [...prev, habit]);
-    
-    if (settings.notificationsEnabled && habit.reminderTime) {
-      await scheduleHabitNotification(habit);
+  const saveHabits = async (newHabits: Habit[]) => {
+    try {
+      await AsyncStorage.setItem(HABITS_KEY, JSON.stringify(newHabits));
+      setHabits(newHabits);
+    } catch (error) {
+      console.error('Failed to save habits:', error);
     }
-  }
+  };
 
-  async function updateHabit(habit: Habit) {
-    await storage.updateHabit(habit);
-    setHabits(prev => prev.map(h => h.id === habit.id ? habit : h));
-    
-    if (settings.notificationsEnabled && habit.reminderTime) {
-      await scheduleHabitNotification(habit);
-    } else {
-      await cancelHabitNotification(habit.id);
+  const addHabit = async (habitData: Omit<Habit, 'id' | 'completions' | 'createdAt'>) => {
+    const newHabit: Habit = {
+      ...habitData,
+      id: Date.now().toString(),
+      completions: [],
+      createdAt: new Date().toISOString(),
+    };
+
+    if (habitData.reminderTime) {
+      await scheduleHabitNotification(newHabit);
     }
-  }
 
-  async function deleteHabit(habitId: string) {
-    await storage.deleteHabit(habitId);
-    setHabits(prev => prev.filter(h => h.id !== habitId));
-    await cancelHabitNotification(habitId);
-  }
+    await saveHabits([...habits, newHabit]);
+  };
 
-  async function updateSettings(newSettings: Partial<UserSettings>) {
-    const updated = { ...settings, ...newSettings };
-    await storage.saveSettings(updated);
-    setSettings(updated);
-  }
+  const updateHabit = async (updatedHabit: Habit) => {
+    const updated = habits.map(h => h.id === updatedHabit.id ? updatedHabit : h);
+    
+    await cancelHabitNotification(updatedHabit.id);
+    if (updatedHabit.reminderTime) {
+      await scheduleHabitNotification(updatedHabit);
+    }
 
-  async function resetAllData() {
-    await storage.resetAllData();
-    setHabits([]);
-    setSettings({
-      notificationsEnabled: false,
-      darkMode: false,
-      hasCompletedOnboarding: false,
+    await saveHabits(updated);
+  };
+
+  const deleteHabit = async (id: string) => {
+    await cancelHabitNotification(id);
+    await saveHabits(habits.filter(h => h.id !== id));
+  };
+
+  const toggleCompletion = async (habitId: string, date: string) => {
+    const updated = habits.map(habit => {
+      if (habit.id === habitId) {
+        const completions = habit.completions.includes(date)
+          ? habit.completions.filter(d => d !== date)
+          : [...habit.completions, date];
+        return { ...habit, completions };
+      }
+      return habit;
     });
-  }
+    await saveHabits(updated);
+  };
 
-  async function refreshHabits() {
-    const loadedHabits = await storage.getHabits();
-    setHabits(loadedHabits);
-  }
+  const refreshHabits = async () => {
+    await loadHabits();
+  };
+
+  const updateSettings = async (settings: any) => {
+    try {
+      const stored = await AsyncStorage.getItem(SETTINGS_KEY);
+      const current = stored ? JSON.parse(stored) : {};
+      const updated = { ...current, ...settings };
+      await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
+    } catch (error) {
+      console.error('Failed to update settings:', error);
+    }
+  };
 
   return (
-    <HabitContext.Provider
-      value={{
-        habits,
-        settings,
-        loading,
-        addHabit,
-        updateHabit,
-        deleteHabit,
-        updateSettings,
-        resetAllData,
-        refreshHabits,
-      }}
-    >
+    <HabitContext.Provider value={{
+      habits,
+      loading,
+      addHabit,
+      updateHabit,
+      deleteHabit,
+      toggleCompletion,
+      refreshHabits,
+      updateSettings,
+    }}>
       {children}
     </HabitContext.Provider>
   );

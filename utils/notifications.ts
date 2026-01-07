@@ -3,92 +3,72 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { Habit } from '@/types/habit';
 
-// Set notification handler
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
     shouldPlaySound: true,
-    shouldSetBadge: true,
+    shouldSetBadge: false,
   }),
 });
 
 export async function requestNotificationPermissions(): Promise<boolean> {
-  try {
-    const { status: existingStatus } = await Notifications.getPermissionsAsync();
-    let finalStatus = existingStatus;
+  const { status: existingStatus } = await Notifications.getPermissionsAsync();
+  let finalStatus = existingStatus;
 
-    if (existingStatus !== 'granted') {
-      const { status } = await Notifications.requestPermissionsAsync();
-      finalStatus = status;
-    }
-
-    if (Platform.OS === 'android') {
-      await Notifications.setNotificationChannelAsync('habit-reminders', {
-        name: 'Habit Reminders',
-        importance: Notifications.AndroidImportance.HIGH,
-        vibrationPattern: [0, 250, 250, 250],
-        lightColor: '#4F46E5',
-      });
-    }
-
-    return finalStatus === 'granted';
-  } catch (error) {
-    console.error('Error requesting notification permissions:', error);
-    return false;
+  if (existingStatus !== 'granted') {
+    const { status } = await Notifications.requestPermissionsAsync();
+    finalStatus = status;
   }
+
+  return finalStatus === 'granted';
 }
 
 export async function scheduleHabitNotification(habit: Habit): Promise<void> {
-  if (!habit.reminderTime) {
-    return;
-  }
+  if (!habit.reminderTime) return;
 
-  try {
-    // Cancel existing notifications for this habit
-    await cancelHabitNotification(habit.id);
+  const [hours, minutes] = habit.reminderTime.split(':').map(Number);
 
-    const [hours, minutes] = habit.reminderTime.split(':').map(Number);
-    
-    const trigger: Notifications.DailyTriggerInput = {
-      type: Notifications.SchedulableTriggerInputTypes.DAILY,
-      hour: hours,
-      minute: minutes,
-      repeats: true,
-    };
-
+  if (habit.schedule === 'daily') {
     await Notifications.scheduleNotificationAsync({
       content: {
         title: 'Momentum Reminder',
-        body: `Time to complete: ${habit.name} ${habit.icon}`,
+        body: `Time to complete: ${habit.name}`,
         data: { habitId: habit.id },
       },
-      trigger,
-      identifier: `habit-${habit.id}`,
+      trigger: {
+        hour: hours,
+        minute: minutes,
+        repeats: true,
+      },
     });
-
-    console.log(`Scheduled notification for habit: ${habit.name} at ${habit.reminderTime}`);
-  } catch (error) {
-    console.error('Error scheduling notification:', error);
+  } else if (habit.schedule === 'specific' && Array.isArray(habit.scheduledDays)) {
+    for (const day of habit.scheduledDays) {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Momentum Reminder',
+          body: `Time to complete: ${habit.name}`,
+          data: { habitId: habit.id },
+        },
+        trigger: {
+          weekday: day + 1, // Expo uses 1-7 (Sun-Sat)
+          hour: hours,
+          minute: minutes,
+          repeats: true,
+        },
+      });
+    }
   }
 }
 
 export async function cancelHabitNotification(habitId: string): Promise<void> {
-  try {
-    const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-    const habitNotifications = scheduled.filter(n => n.identifier === `habit-${habitId}`);
-    
-    for (const notification of habitNotifications) {
+  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  for (const notification of scheduled) {
+    if (notification.content.data?.habitId === habitId) {
       await Notifications.cancelScheduledNotificationAsync(notification.identifier);
     }
-  } catch (error) {
-    console.error('Error canceling notification:', error);
   }
 }
 
 export async function cancelAllHabitNotifications(): Promise<void> {
-  try {
-    await Notifications.cancelAllScheduledNotificationsAsync();
-  } catch (error) {
-    console.error('Error canceling all notifications:', error);
-  }
+  await Notifications.cancelAllScheduledNotificationsAsync();
 }

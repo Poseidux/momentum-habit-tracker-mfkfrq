@@ -6,15 +6,14 @@ import { useAuth } from './AuthContext';
 interface PremiumContextType {
   isPremium: boolean;
   loading: boolean;
-  showPaywall: () => void;
   checkPremiumStatus: () => Promise<void>;
-  upgradeToPremium: () => Promise<void>;
+  setPremiumStatus: (status: boolean) => Promise<void>;
 }
 
 const PremiumContext = createContext<PremiumContextType | undefined>(undefined);
 
-const PREMIUM_KEY = '@momentum_premium_status';
-const DEVELOPER_EMAIL = 'developerposeiduxfu39a33es@gmail.com';
+const PREMIUM_KEY = '@momentum_premium';
+const DEV_EMAIL = 'developerposeiduxfu39a33es@gmail.com';
 
 export function PremiumProvider({ children }: { children: ReactNode }) {
   const [isPremium, setIsPremium] = useState(false);
@@ -28,45 +27,37 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
   const checkPremiumStatus = async () => {
     try {
       // Developer bypass
-      if (user?.email === DEVELOPER_EMAIL) {
-        console.log('[Premium] Developer account detected - granting premium access');
+      if (user?.email === DEV_EMAIL) {
         setIsPremium(true);
         setLoading(false);
         return;
       }
 
       const stored = await AsyncStorage.getItem(PREMIUM_KEY);
-      if (stored) {
-        const premiumData = JSON.parse(stored);
-        setIsPremium(premiumData.isPremium || false);
-        console.log('[Premium] Loaded premium status:', premiumData.isPremium);
-      } else {
-        console.log('[Premium] No premium status found - user is free tier');
-      }
+      setIsPremium(stored === 'true');
     } catch (error) {
-      console.error('[Premium] Error checking premium status:', error);
+      console.error('Failed to check premium status:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const upgradeToPremium = async () => {
+  const setPremiumStatus = async (status: boolean) => {
     try {
-      console.log('[Premium] Upgrading user to premium');
-      await AsyncStorage.setItem(PREMIUM_KEY, JSON.stringify({ isPremium: true }));
-      setIsPremium(true);
+      await AsyncStorage.setItem(PREMIUM_KEY, status.toString());
+      setIsPremium(status);
     } catch (error) {
-      console.error('[Premium] Error upgrading to premium:', error);
-      throw error;
+      console.error('Failed to set premium status:', error);
     }
   };
 
-  const showPaywall = () => {
-    console.log('[Premium] Paywall requested - will be shown via PaywallModal component');
-  };
-
   return (
-    <PremiumContext.Provider value={{ isPremium, loading, showPaywall, checkPremiumStatus, upgradeToPremium }}>
+    <PremiumContext.Provider value={{
+      isPremium,
+      loading,
+      checkPremiumStatus,
+      setPremiumStatus,
+    }}>
       {children}
     </PremiumContext.Provider>
   );

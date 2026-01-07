@@ -34,7 +34,12 @@ export default function TabLayout() {
         options={{
           title: 'Today',
           tabBarIcon: ({ color, size }) => (
-            <IconSymbol name="checkmark.circle" size={size} color={color} />
+            <IconSymbol 
+              ios_icon_name="checkmark.circle" 
+              android_material_icon_name="check-circle"
+              size={size} 
+              color={color} 
+            />
           ),
         }}
       />
@@ -43,7 +48,12 @@ export default function TabLayout() {
         options={{
           title: 'Progress',
           tabBarIcon: ({ color, size }) => (
-            <IconSymbol name="chart.bar" size={size} color={color} />
+            <IconSymbol 
+              ios_icon_name="chart.bar" 
+              android_material_icon_name="bar-chart"
+              size={size} 
+              color={color} 
+            />
           ),
         }}
       />
@@ -52,7 +62,12 @@ export default function TabLayout() {
         options={{
           title: 'Social',
           tabBarIcon: ({ color, size }) => (
-            <IconSymbol name="person.2" size={size} color={color} />
+            <IconSymbol 
+              ios_icon_name="person.2" 
+              android_material_icon_name="group"
+              size={size} 
+              color={color} 
+            />
           ),
         }}
       />
@@ -61,7 +76,12 @@ export default function TabLayout() {
         options={{
           title: 'Settings',
           tabBarIcon: ({ color, size }) => (
-            <IconSymbol name="gearshape" size={size} color={color} />
+            <IconSymbol 
+              ios_icon_name="gearshape" 
+              android_material_icon_name="settings"
+              size={size} 
+              color={color} 
+            />
           ),
         }}
       />

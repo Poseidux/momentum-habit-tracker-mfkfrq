@@ -8,10 +8,9 @@ import {
   calculateStreak,
 } from '@/utils/habitUtils';
 import * as Haptics from 'expo-haptics';
-import Animated, { FadeIn, FadeInDown, withSpring, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, withSpring, useAnimatedStyle, useSharedValue, withSequence } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '@/styles/commonStyles';
-import { LinearGradient } from 'expo-linear-gradient';
 import {
   View,
   Text,
@@ -27,74 +26,52 @@ import { IconSymbol } from '@/components/IconSymbol';
 import { useAuth } from '@/contexts/AuthContext';
 import { authenticatedGet, authenticatedPost } from '@/utils/api';
 
-// Futuristic Completion Ring Component
+// Simple Completion Ring Component (no SVG)
 function FuturisticCompletionRing({ progress, size = 120 }: { progress: number; size?: number }) {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? colors.dark : colors.light;
   
   const scale = useSharedValue(1);
-  const rotation = useSharedValue(0);
 
   useEffect(() => {
     if (progress === 100) {
       scale.value = withSequence(
-        withSpring(1.1, { damping: 8 }),
+        withSpring(1.15, { damping: 8 }),
         withSpring(1, { damping: 10 })
       );
-      rotation.value = withTiming(360, { duration: 800 });
     }
   }, [progress]);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: scale.value },
-      { rotate: `${rotation.value}deg` },
-    ],
+    transform: [{ scale: scale.value }],
   }));
-
-  const radius = (size - 12) / 2;
-  const circumference = radius * 2 * Math.PI;
-  const strokeDashoffset = circumference - (progress / 100) * circumference;
 
   return (
     <Animated.View style={[styles.completionRingContainer, animatedStyle]}>
-      {/* Outer glow effect */}
-      {progress === 100 && (
-        <View style={[styles.glowOuter, { width: size + 20, height: size + 20 }]}>
-          <LinearGradient
-            colors={[theme.primary + '40', theme.primary + '00']}
-            style={StyleSheet.absoluteFill}
-            start={{ x: 0.5, y: 0.5 }}
-            end={{ x: 1, y: 1 }}
-          />
-        </View>
-      )}
-      
-      {/* Main ring container */}
       <View style={[styles.ringContent, { width: size, height: size }]}>
         {/* Background ring */}
-        <View style={[styles.backgroundRing, { width: size, height: size, borderRadius: size / 2, borderColor: theme.border }]} />
+        <View style={[styles.backgroundRing, { 
+          width: size, 
+          height: size, 
+          borderRadius: size / 2, 
+          borderColor: theme.border,
+          borderWidth: 10,
+        }]} />
         
-        {/* Progress ring with gradient */}
-        <View style={[styles.progressRing, { width: size, height: size }]}>
-          <svg width={size} height={size} style={{ transform: [{ rotate: '-90deg' }] }}>
-            <circle
-              cx={size / 2}
-              cy={size / 2}
-              r={radius}
-              stroke={theme.primary}
-              strokeWidth={12}
-              fill="none"
-              strokeDasharray={`${circumference} ${circumference}`}
-              strokeDashoffset={strokeDashoffset}
-              strokeLinecap="round"
-              style={{
-                filter: progress === 100 ? `drop-shadow(0 0 8px ${theme.primary})` : 'none',
-              }}
-            />
-          </svg>
-        </View>
+        {/* Progress indicator */}
+        <View style={[styles.progressIndicator, {
+          width: size - 20,
+          height: size - 20,
+          borderRadius: (size - 20) / 2,
+          borderColor: theme.primary,
+          borderWidth: 10,
+          borderTopColor: progress > 0 ? theme.primary : 'transparent',
+          borderRightColor: progress > 25 ? theme.primary : 'transparent',
+          borderBottomColor: progress > 50 ? theme.primary : 'transparent',
+          borderLeftColor: progress > 75 ? theme.primary : 'transparent',
+          opacity: progress > 0 ? 1 : 0,
+        }]} />
 
         {/* Center content */}
         <View style={styles.centerContent}>
@@ -416,10 +393,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  glowOuter: {
-    position: 'absolute',
-    borderRadius: 999,
-  },
   ringContent: {
     position: 'relative',
     alignItems: 'center',
@@ -427,9 +400,8 @@ const styles = StyleSheet.create({
   },
   backgroundRing: {
     position: 'absolute',
-    borderWidth: 12,
   },
-  progressRing: {
+  progressIndicator: {
     position: 'absolute',
   },
   centerContent: {

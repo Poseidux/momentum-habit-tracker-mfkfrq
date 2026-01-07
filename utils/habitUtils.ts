@@ -6,134 +6,93 @@ export function getTodayString(): string {
   return today.toISOString().split('T')[0];
 }
 
-export function isHabitScheduledForDate(habit: Habit, date: Date): boolean {
-  if (habit.schedule === 'daily') {
-    return true;
-  }
+export function isHabitScheduledForDate(habit: Habit, date: Date | string): boolean {
+  if (habit.schedule === 'daily') return true;
   
-  if (habit.schedule === 'specific' && habit.scheduledDays) {
-    const dayOfWeek = date.getDay();
-    return habit.scheduledDays.includes(dayOfWeek);
-  }
-  
-  return false;
-}
-
-export function isHabitCompletedOnDate(habit: Habit, dateString: string): boolean {
-  return habit.completions.includes(dateString);
+  const dateObj = typeof date === 'string' ? new Date(date + 'T00:00:00') : date;
+  const dayOfWeek = dateObj.getDay();
+  return Array.isArray(habit.scheduledDays) && habit.scheduledDays.includes(dayOfWeek);
 }
 
 export function toggleHabitCompletion(habit: Habit, dateString: string): Habit {
-  const isCompleted = habit.completions.includes(dateString);
+  const completions = habit.completions.includes(dateString)
+    ? habit.completions.filter(d => d !== dateString)
+    : [...habit.completions, dateString];
   
-  if (isCompleted) {
-    return {
-      ...habit,
-      completions: habit.completions.filter(d => d !== dateString),
-    };
-  } else {
-    return {
-      ...habit,
-      completions: [...habit.completions, dateString],
-    };
-  }
+  return { ...habit, completions };
 }
 
 export function calculateStreak(habit: Habit): number {
-  if (habit.completions.length === 0) {
-    return 0;
-  }
+  if (habit.completions.length === 0) return 0;
 
-  const sortedCompletions = [...habit.completions].sort().reverse();
-  const today = new Date();
+  const sorted = [...habit.completions].sort().reverse();
+  const today = getTodayString();
   let streak = 0;
   let currentDate = new Date(today);
 
   for (let i = 0; i < 365; i++) {
-    const dateString = currentDate.toISOString().split('T')[0];
+    const dateStr = currentDate.toISOString().split('T')[0];
     
-    if (!isHabitScheduledForDate(habit, currentDate)) {
+    if (!isHabitScheduledForDate(habit, dateStr)) {
       currentDate.setDate(currentDate.getDate() - 1);
       continue;
     }
 
-    if (sortedCompletions.includes(dateString)) {
+    if (sorted.includes(dateStr)) {
       streak++;
-      currentDate.setDate(currentDate.getDate() - 1);
     } else {
       break;
     }
+
+    currentDate.setDate(currentDate.getDate() - 1);
   }
 
   return streak;
 }
 
-export function getWeeklyStats(habits: Habit[]): {
-  completedThisWeek: number;
-  bestDay: string;
-} {
+export function getWeeklyStats(habits: Habit[]) {
   const today = new Date();
   const weekStart = new Date(today);
   weekStart.setDate(today.getDate() - today.getDay());
-  
-  const dayCounts: { [key: string]: number } = {
-    'Sunday': 0,
-    'Monday': 0,
-    'Tuesday': 0,
-    'Wednesday': 0,
-    'Thursday': 0,
-    'Friday': 0,
-    'Saturday': 0,
-  };
-  
+
   let totalCompleted = 0;
-  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  let totalScheduled = 0;
 
   for (let i = 0; i < 7; i++) {
     const date = new Date(weekStart);
     date.setDate(weekStart.getDate() + i);
-    const dateString = date.toISOString().split('T')[0];
-    const dayName = dayNames[date.getDay()];
+    const dateStr = date.toISOString().split('T')[0];
 
     habits.forEach(habit => {
-      if (isHabitScheduledForDate(habit, date) && habit.completions.includes(dateString)) {
-        dayCounts[dayName]++;
-        totalCompleted++;
+      if (isHabitScheduledForDate(habit, dateStr)) {
+        totalScheduled++;
+        if (habit.completions.includes(dateStr)) {
+          totalCompleted++;
+        }
       }
     });
   }
 
-  let bestDay = 'None';
-  let maxCount = 0;
-  
-  Object.entries(dayCounts).forEach(([day, count]) => {
-    if (count > maxCount) {
-      maxCount = count;
-      bestDay = day;
-    }
-  });
-
-  return {
-    completedThisWeek: totalCompleted,
-    bestDay: maxCount > 0 ? bestDay : 'None',
-  };
+  return { totalCompleted, totalScheduled };
 }
 
-export function getCompletionPercentage(habits: Habit[], dateString: string): number {
-  if (habits.length === 0) {
-    return 0;
+export function getCompletionPercentage(habit: Habit, days: number = 30): number {
+  const today = new Date();
+  let completed = 0;
+  let scheduled = 0;
+
+  for (let i = 0; i < days; i++) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0];
+
+    if (isHabitScheduledForDate(habit, dateStr)) {
+      scheduled++;
+      if (habit.completions.includes(dateStr)) {
+        completed++;
+      }
+    }
   }
 
-  const date = new Date(dateString);
-  const scheduledHabits = habits.filter(h => isHabitScheduledForDate(h, date));
-  
-  if (scheduledHabits.length === 0) {
-    return 0;
-  }
-
-  const completedCount = scheduledHabits.filter(h => 
-    h.completions.includes(dateString)
-  ).length;
-
-  return Math.round((completedCount / scheduledHabits.length) * 100);
+  return scheduled > 0 ? Math.round((completed / scheduled) * 100) : 0;
 }
