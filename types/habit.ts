@@ -11,3 +11,9 @@ export interface Habit {
   createdAt: string;
   customIconUri?: string; // For premium users
 }
+
+export interface UserSettings {
+  notificationsEnabled: boolean;
+  darkMode: boolean;
+  hasCompletedOnboarding: boolean;
+}

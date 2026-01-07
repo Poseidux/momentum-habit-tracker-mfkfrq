@@ -8,6 +8,7 @@ interface PremiumContextType {
   loading: boolean;
   checkPremiumStatus: () => Promise<void>;
   setPremiumStatus: (status: boolean) => Promise<void>;
+  upgradeToPremium: () => Promise<void>;
 }
 
 const PremiumContext = createContext<PremiumContextType | undefined>(undefined);
@@ -51,12 +52,17 @@ export function PremiumProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const upgradeToPremium = async () => {
+    await setPremiumStatus(true);
+  };
+
   return (
     <PremiumContext.Provider value={{
       isPremium,
       loading,
       checkPremiumStatus,
       setPremiumStatus,
+      upgradeToPremium,
     }}>
       {children}
     </PremiumContext.Provider>

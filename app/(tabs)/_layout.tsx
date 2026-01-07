@@ -1,87 +1,61 @@
 
-import React from 'react';
-import { Tabs } from 'expo-router';
-import { useColorScheme, Platform } from 'react-native';
-import { IconSymbol } from '@/components/IconSymbol';
-import { colors } from '@/styles/commonStyles';
+import { Tabs } from "expo-router";
+import { useColorScheme, Platform } from "react-native";
+import { colors } from "@/styles/commonStyles";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 export default function TabLayout() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
-  const theme = isDark ? colors.dark : colors.light;
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === "dark" ? colors.dark : colors.light;
 
   return (
     <Tabs
       screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: theme.accent,
+        tabBarActiveTintColor: theme.primary,
         tabBarInactiveTintColor: theme.textSecondary,
         tabBarStyle: {
           backgroundColor: theme.card,
           borderTopColor: theme.border,
-          height: Platform.OS === 'ios' ? 88 : 65,
-          paddingBottom: Platform.OS === 'ios' ? 28 : 10,
-          paddingTop: 10,
+          height: Platform.OS === "ios" ? 88 : 68,
+          paddingBottom: Platform.OS === "ios" ? 28 : 12,
+          paddingTop: 8,
         },
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: '500',
-        },
+        headerShown: false,
       }}
     >
       <Tabs.Screen
         name="(home)"
         options={{
-          title: 'Today',
+          title: "Today",
           tabBarIcon: ({ color, size }) => (
-            <IconSymbol 
-              ios_icon_name="checkmark.circle" 
-              android_material_icon_name="check-circle"
-              size={size} 
-              color={color} 
-            />
+            <MaterialIcons name="today" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="progress"
         options={{
-          title: 'Progress',
+          title: "Progress",
           tabBarIcon: ({ color, size }) => (
-            <IconSymbol 
-              ios_icon_name="chart.bar" 
-              android_material_icon_name="bar-chart"
-              size={size} 
-              color={color} 
-            />
+            <MaterialIcons name="bar-chart" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="social"
         options={{
-          title: 'Social',
+          title: "Social",
           tabBarIcon: ({ color, size }) => (
-            <IconSymbol 
-              ios_icon_name="person.2" 
-              android_material_icon_name="group"
-              size={size} 
-              color={color} 
-            />
+            <MaterialIcons name="people" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
-          title: 'Settings',
+          title: "Settings",
           tabBarIcon: ({ color, size }) => (
-            <IconSymbol 
-              ios_icon_name="gearshape" 
-              android_material_icon_name="settings"
-              size={size} 
-              color={color} 
-            />
+            <MaterialIcons name="settings" size={size} color={color} />
           ),
         }}
       />

@@ -5,6 +5,7 @@ import React, { useState } from 'react';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -16,7 +17,6 @@ import {
   Platform,
 } from 'react-native';
 import { requestNotificationPermissions } from '@/utils/notifications';
-import { Habit } from '@/types/habit';
 import { IconSymbol } from '@/components/IconSymbol';
 import * as Haptics from 'expo-haptics';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
@@ -55,7 +55,7 @@ export default function OnboardingScreen() {
 
     // Save user name if provided
     if (name.trim()) {
-      await updateSettings({ name: name.trim() });
+      await AsyncStorage.setItem('@momentum_user_name', name.trim());
     }
 
     // Create selected habits
@@ -65,17 +65,13 @@ export default function OnboardingScreen() {
 
     for (const index of selectedHabits) {
       const starter = STARTER_HABITS[index];
-      const habit: Habit = {
-        id: `${Date.now()}-${index}`,
+      await addHabit({
         name: starter.name,
         color: starter.color,
         icon: starter.icon,
         schedule: 'daily',
         reminderTime: timeString,
-        completions: [],
-        createdAt: new Date().toISOString(),
-      };
-      await addHabit(habit);
+      });
     }
 
     // Request notification permissions if reminder enabled
@@ -85,7 +81,7 @@ export default function OnboardingScreen() {
     }
 
     // Mark onboarding as complete
-    await updateSettings({ hasCompletedOnboarding: true });
+    await AsyncStorage.setItem('@onboarded', 'true');
 
     // Navigate to main app
     router.replace('/(tabs)/(home)/');
@@ -123,12 +119,12 @@ export default function OnboardingScreen() {
               Welcome to Momentum
             </Text>
             <Text style={[styles.description, { color: theme.textSecondary }]}>
-              Build better habits, one day at a time. Let's get started by personalizing your experience.
+              Build better habits, one day at a time. Let&apos;s get started by personalizing your experience.
             </Text>
 
             <View style={styles.inputSection}>
               <Text style={[styles.label, { color: theme.text }]}>
-                What's your name? (Optional)
+                What&apos;s your name? (Optional)
               </Text>
               <TextInput
                 style={[
