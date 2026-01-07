@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
 import { HabitProvider, useHabits } from '@/contexts/HabitContext';
+import { AuthProvider } from '@/contexts/AuthContext';
 import { colors } from '@/styles/commonStyles';
 
 SplashScreen.preventAutoHideAsync();
@@ -67,6 +68,9 @@ function RootLayoutContent() {
         <Stack.Screen name="add-habit" options={{ presentation: 'modal' }} />
         <Stack.Screen name="edit-habit" options={{ presentation: 'modal' }} />
         <Stack.Screen name="manage-habits" />
+        <Stack.Screen name="auth" />
+        <Stack.Screen name="auth-popup" />
+        <Stack.Screen name="auth-callback" />
       </Stack>
       <StatusBar style={isDark ? 'light' : 'dark'} />
     </>
@@ -77,9 +81,11 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <HabitProvider>
-          <RootLayoutContent />
-        </HabitProvider>
+        <AuthProvider>
+          <HabitProvider>
+            <RootLayoutContent />
+          </HabitProvider>
+        </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

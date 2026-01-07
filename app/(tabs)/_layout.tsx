@@ -1,16 +1,14 @@
 
 import React from 'react';
 import { Stack } from 'expo-router';
-import { IconSymbol } from '@/components/IconSymbol';
 import FloatingTabBar, { TabBarItem } from '@/components/FloatingTabBar';
-import { colors } from '@/styles/commonStyles';
 
 export default function TabLayout() {
   const tabs: TabBarItem[] = [
     {
       name: '(home)',
       route: '/(tabs)/(home)/',
-      icon: 'home',
+      icon: 'today',
       label: 'Today',
     },
     {
@@ -18,6 +16,12 @@ export default function TabLayout() {
       route: '/(tabs)/progress',
       icon: 'show-chart',
       label: 'Progress',
+    },
+    {
+      name: 'social',
+      route: '/(tabs)/social',
+      icon: 'group',
+      label: 'Social',
     },
     {
       name: 'settings',
@@ -37,6 +41,7 @@ export default function TabLayout() {
       >
         <Stack.Screen name="(home)" />
         <Stack.Screen name="progress" />
+        <Stack.Screen name="social" />
         <Stack.Screen name="settings" />
       </Stack>
       <FloatingTabBar tabs={tabs} />

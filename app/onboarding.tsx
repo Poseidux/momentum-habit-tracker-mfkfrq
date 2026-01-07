@@ -1,5 +1,10 @@
 
+import { useHabits } from '@/contexts/HabitContext';
+import { colors, habitColors, habitIcons } from '@/styles/commonStyles';
 import React, { useState } from 'react';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Stack, router } from 'expo-router';
 import {
   View,
   Text,
@@ -10,269 +15,372 @@ import {
   useColorScheme,
   Platform,
 } from 'react-native';
-import { Stack, router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import DateTimePicker from '@react-native-community/datetimepicker';
-import { colors, habitColors, habitIcons } from '@/styles/commonStyles';
-import { useHabits } from '@/contexts/HabitContext';
-import { Habit } from '@/types/habit';
 import { requestNotificationPermissions } from '@/utils/notifications';
+import { Habit } from '@/types/habit';
+import { IconSymbol } from '@/components/IconSymbol';
+import * as Haptics from 'expo-haptics';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 
 const STARTER_HABITS = [
+  { name: 'Drink Water', icon: '💧', color: habitColors[6] },
   { name: 'Exercise', icon: '💪', color: habitColors[0] },
-  { name: 'Meditate', icon: '🧘', color: habitColors[1] },
-  { name: 'Read', icon: '📚', color: habitColors[2] },
-  { name: 'Drink Water', icon: '💧', color: habitColors[3] },
-  { name: 'Journal', icon: '✍️', color: habitColors[4] },
-  { name: 'Sleep Early', icon: '😴', color: habitColors[5] },
+  { name: 'Read', icon: '📚', color: habitColors[1] },
+  { name: 'Meditate', icon: '🧘', color: habitColors[2] },
+  { name: 'Journal', icon: '✍️', color: habitColors[3] },
+  { name: 'Sleep Early', icon: '😴', color: habitColors[4] },
 ];
 
 export default function OnboardingScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? colors.dark : colors.light;
-
   const { addHabit, updateSettings } = useHabits();
+
   const [step, setStep] = useState(1);
   const [name, setName] = useState('');
-  const [selectedHabits, setSelectedHabits] = useState<Set<number>>(new Set());
+  const [selectedHabits, setSelectedHabits] = useState<number[]>([]);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState(new Date());
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [enableReminder, setEnableReminder] = useState(false);
 
   const toggleHabit = (index: number) => {
-    const newSelected = new Set(selectedHabits);
-    if (newSelected.has(index)) {
-      newSelected.delete(index);
-    } else {
-      if (newSelected.size < 3) {
-        newSelected.add(index);
-      }
-    }
-    setSelectedHabits(newSelected);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setSelectedHabits(prev =>
+      prev.includes(index) ? prev.filter(i => i !== index) : [...prev, index]
+    );
   };
 
   const handleFinish = async () => {
-    // Save selected habits
-    const habitsToAdd: Habit[] = Array.from(selectedHabits).map(index => {
-      const template = STARTER_HABITS[index];
-      return {
-        id: `habit-${Date.now()}-${index}`,
-        name: template.name,
-        color: template.color,
-        icon: template.icon,
-        schedule: 'daily' as const,
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+    // Save user name if provided
+    if (name.trim()) {
+      await updateSettings({ name: name.trim() });
+    }
+
+    // Create selected habits
+    const timeString = reminderEnabled
+      ? `${reminderTime.getHours().toString().padStart(2, '0')}:${reminderTime.getMinutes().toString().padStart(2, '0')}`
+      : undefined;
+
+    for (const index of selectedHabits) {
+      const starter = STARTER_HABITS[index];
+      const habit: Habit = {
+        id: `${Date.now()}-${index}`,
+        name: starter.name,
+        color: starter.color,
+        icon: starter.icon,
+        schedule: 'daily',
+        reminderTime: timeString,
         completions: [],
         createdAt: new Date().toISOString(),
-        reminderTime: enableReminder
-          ? `${reminderTime.getHours().toString().padStart(2, '0')}:${reminderTime.getMinutes().toString().padStart(2, '0')}`
-          : undefined,
       };
-    });
-
-    for (const habit of habitsToAdd) {
       await addHabit(habit);
     }
 
-    // Request notification permissions if reminder is enabled
-    let notificationsEnabled = false;
-    if (enableReminder) {
-      notificationsEnabled = await requestNotificationPermissions();
+    // Request notification permissions if reminder enabled
+    if (reminderEnabled) {
+      await requestNotificationPermissions();
+      await updateSettings({ notificationsEnabled: true });
     }
 
-    // Update settings
-    await updateSettings({
-      name: name || undefined,
-      hasCompletedOnboarding: true,
-      notificationsEnabled,
-    });
+    // Mark onboarding as complete
+    await updateSettings({ hasCompletedOnboarding: true });
 
     // Navigate to main app
     router.replace('/(tabs)/(home)/');
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]}>
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
       <Stack.Screen options={{ headerShown: false }} />
-      
+
       <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Step 1: Name */}
-        {step === 1 && (
-          <View style={styles.stepContainer}>
-            <Text style={[styles.title, { color: theme.text }]}>Welcome to Momentum</Text>
-            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              What should we call you?
-            </Text>
-            
-            <TextInput
+        {/* Progress Indicator */}
+        <View style={styles.progressContainer}>
+          {[1, 2, 3].map((s) => (
+            <View
+              key={s}
               style={[
-                styles.input,
+                styles.progressDot,
                 {
-                  backgroundColor: theme.card,
-                  color: theme.text,
-                  borderColor: theme.border,
-                },
+                  backgroundColor: s <= step ? theme.primary : theme.border,
+                }
               ]}
-              placeholder="Your name (optional)"
-              placeholderTextColor={theme.textSecondary}
-              value={name}
-              onChangeText={setName}
-              autoFocus
             />
+          ))}
+        </View>
 
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={[styles.button, { backgroundColor: theme.primary }]}
-                onPress={() => setStep(2)}
-              >
-                <Text style={styles.buttonText}>Continue</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.skipButton}
-                onPress={() => setStep(2)}
-              >
-                <Text style={[styles.skipText, { color: theme.textSecondary }]}>Skip</Text>
-              </TouchableOpacity>
+        {/* Step 1: Welcome */}
+        {step === 1 && (
+          <Animated.View entering={FadeIn} style={styles.stepContainer}>
+            <Text style={[styles.emoji, { marginBottom: 24 }]}>👋</Text>
+            <Text style={[styles.title, { color: theme.text }]}>
+              Welcome to Momentum
+            </Text>
+            <Text style={[styles.description, { color: theme.textSecondary }]}>
+              Build better habits, one day at a time. Let's get started by personalizing your experience.
+            </Text>
+
+            <View style={styles.inputSection}>
+              <Text style={[styles.label, { color: theme.text }]}>
+                What's your name? (Optional)
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: theme.card,
+                    color: theme.text,
+                    borderColor: theme.border,
+                  }
+                ]}
+                placeholder="Enter your name"
+                placeholderTextColor={theme.textSecondary}
+                value={name}
+                onChangeText={setName}
+                maxLength={30}
+              />
             </View>
-          </View>
+
+            <TouchableOpacity
+              style={[styles.button, { backgroundColor: theme.primary }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setStep(2);
+              }}
+            >
+              <Text style={styles.buttonText}>Continue</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.skipButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                setStep(2);
+              }}
+            >
+              <Text style={[styles.skipText, { color: theme.textSecondary }]}>
+                Skip
+              </Text>
+            </TouchableOpacity>
+          </Animated.View>
         )}
 
-        {/* Step 2: Select Habits */}
+        {/* Step 2: Choose Habits */}
         {step === 2 && (
-          <View style={styles.stepContainer}>
-            <Text style={[styles.title, { color: theme.text }]}>Choose Your Habits</Text>
-            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              Pick up to 3 habits to get started
+          <Animated.View entering={FadeIn} style={styles.stepContainer}>
+            <Text style={[styles.emoji, { marginBottom: 24 }]}>🎯</Text>
+            <Text style={[styles.title, { color: theme.text }]}>
+              Choose Your Habits
+            </Text>
+            <Text style={[styles.description, { color: theme.textSecondary }]}>
+              Select up to 3 habits to get started. You can always add more later.
             </Text>
 
             <View style={styles.habitsGrid}>
-              {STARTER_HABITS.map((habit, index) => {
-                const isSelected = selectedHabits.has(index);
-                return (
+              {STARTER_HABITS.map((habit, index) => (
+                <Animated.View
+                  key={index}
+                  entering={FadeInDown.delay(index * 50)}
+                >
                   <TouchableOpacity
-                    key={index}
                     style={[
                       styles.habitCard,
                       {
-                        backgroundColor: isSelected ? habit.color : theme.card,
-                        borderColor: isSelected ? habit.color : theme.border,
-                      },
+                        backgroundColor: selectedHabits.includes(index)
+                          ? habit.color + '20'
+                          : theme.card,
+                        borderColor: selectedHabits.includes(index)
+                          ? habit.color
+                          : theme.border,
+                        borderWidth: selectedHabits.includes(index) ? 2 : 1,
+                      }
                     ]}
                     onPress={() => toggleHabit(index)}
+                    disabled={!selectedHabits.includes(index) && selectedHabits.length >= 3}
                   >
                     <Text style={styles.habitIcon}>{habit.icon}</Text>
-                    <Text
-                      style={[
-                        styles.habitName,
-                        { color: isSelected ? '#FFFFFF' : theme.text },
-                      ]}
-                    >
+                    <Text style={[styles.habitName, { color: theme.text }]}>
                       {habit.name}
                     </Text>
+                    {selectedHabits.includes(index) && (
+                      <View style={[styles.checkBadge, { backgroundColor: habit.color }]}>
+                        <IconSymbol
+                          android_material_icon_name="check"
+                          ios_icon_name="checkmark"
+                          size={16}
+                          color="#FFFFFF"
+                        />
+                      </View>
+                    )}
                   </TouchableOpacity>
-                );
-              })}
+                </Animated.View>
+              ))}
             </View>
 
-            <View style={styles.buttonContainer}>
+            <View style={styles.buttonRow}>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: theme.primary }]}
-                onPress={() => setStep(3)}
-                disabled={selectedHabits.size === 0}
+                style={[
+                  styles.buttonSecondary,
+                  {
+                    borderColor: theme.border,
+                    backgroundColor: theme.card,
+                  }
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setStep(1);
+                }}
               >
-                <Text style={styles.buttonText}>
-                  Continue ({selectedHabits.size}/3)
+                <Text style={[styles.buttonTextSecondary, { color: theme.text }]}>
+                  Back
                 </Text>
               </TouchableOpacity>
-              
+
               <TouchableOpacity
-                style={styles.skipButton}
-                onPress={() => setStep(3)}
+                style={[
+                  styles.button,
+                  { backgroundColor: theme.primary, flex: 1 }
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setStep(3);
+                }}
               >
-                <Text style={[styles.skipText, { color: theme.textSecondary }]}>Skip</Text>
+                <Text style={styles.buttonText}>Continue</Text>
               </TouchableOpacity>
             </View>
-          </View>
+          </Animated.View>
         )}
 
-        {/* Step 3: Reminder */}
+        {/* Step 3: Reminders */}
         {step === 3 && (
-          <View style={styles.stepContainer}>
-            <Text style={[styles.title, { color: theme.text }]}>Set a Reminder</Text>
-            <Text style={[styles.subtitle, { color: theme.textSecondary }]}>
-              Get a daily reminder to complete your habits
+          <Animated.View entering={FadeIn} style={styles.stepContainer}>
+            <Text style={[styles.emoji, { marginBottom: 24 }]}>🔔</Text>
+            <Text style={[styles.title, { color: theme.text }]}>
+              Set a Reminder
+            </Text>
+            <Text style={[styles.description, { color: theme.textSecondary }]}>
+              Get a daily notification to help you stay on track with your habits.
             </Text>
 
-            <TouchableOpacity
+            <View 
               style={[
-                styles.reminderToggle,
+                styles.reminderCard,
                 {
-                  backgroundColor: enableReminder ? theme.primary : theme.card,
+                  backgroundColor: theme.card,
                   borderColor: theme.border,
-                },
+                }
               ]}
-              onPress={() => setEnableReminder(!enableReminder)}
             >
-              <Text
-                style={[
-                  styles.reminderText,
-                  { color: enableReminder ? '#FFFFFF' : theme.text },
-                ]}
-              >
-                {enableReminder ? '✓ Reminder Enabled' : 'Enable Reminder'}
-              </Text>
-            </TouchableOpacity>
+              <View style={styles.reminderHeader}>
+                <View style={styles.reminderInfo}>
+                  <IconSymbol
+                    android_material_icon_name="notifications"
+                    ios_icon_name="bell"
+                    size={24}
+                    color={theme.primary}
+                  />
+                  <Text style={[styles.reminderLabel, { color: theme.text }]}>
+                    Daily Reminder
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={[
+                    styles.toggle,
+                    reminderEnabled && { backgroundColor: theme.primary }
+                  ]}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setReminderEnabled(!reminderEnabled);
+                  }}
+                >
+                  <View
+                    style={[
+                      styles.toggleThumb,
+                      reminderEnabled && styles.toggleThumbActive
+                    ]}
+                  />
+                </TouchableOpacity>
+              </View>
 
-            {enableReminder && (
+              {reminderEnabled && (
+                <TouchableOpacity
+                  style={[
+                    styles.timeButton,
+                    {
+                      backgroundColor: theme.background,
+                      borderColor: theme.border,
+                    }
+                  ]}
+                  onPress={() => setShowTimePicker(true)}
+                >
+                  <IconSymbol
+                    android_material_icon_name="access-time"
+                    ios_icon_name="clock"
+                    size={20}
+                    color={theme.primary}
+                  />
+                  <Text style={[styles.timeText, { color: theme.text }]}>
+                    {reminderTime.toLocaleTimeString('en-US', {
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {showTimePicker && (
+                <DateTimePicker
+                  value={reminderTime}
+                  mode="time"
+                  is24Hour={false}
+                  display="default"
+                  onChange={(event, selectedTime) => {
+                    setShowTimePicker(Platform.OS === 'ios');
+                    if (selectedTime) {
+                      setReminderTime(selectedTime);
+                    }
+                  }}
+                />
+              )}
+            </View>
+
+            <View style={styles.buttonRow}>
               <TouchableOpacity
-                style={[styles.timeButton, { backgroundColor: theme.card, borderColor: theme.border }]}
-                onPress={() => setShowTimePicker(true)}
+                style={[
+                  styles.buttonSecondary,
+                  {
+                    borderColor: theme.border,
+                    backgroundColor: theme.card,
+                  }
+                ]}
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  setStep(2);
+                }}
               >
-                <Text style={[styles.timeText, { color: theme.text }]}>
-                  {reminderTime.toLocaleTimeString('en-US', {
-                    hour: 'numeric',
-                    minute: '2-digit',
-                    hour12: true,
-                  })}
+                <Text style={[styles.buttonTextSecondary, { color: theme.text }]}>
+                  Back
                 </Text>
               </TouchableOpacity>
-            )}
 
-            {showTimePicker && (
-              <DateTimePicker
-                value={reminderTime}
-                mode="time"
-                is24Hour={false}
-                display="default"
-                onChange={(event, selectedDate) => {
-                  setShowTimePicker(Platform.OS === 'ios');
-                  if (selectedDate) {
-                    setReminderTime(selectedDate);
-                  }
-                }}
-              />
-            )}
-
-            <View style={styles.buttonContainer}>
               <TouchableOpacity
-                style={[styles.button, { backgroundColor: theme.primary }]}
+                style={[
+                  styles.button,
+                  { backgroundColor: theme.primary, flex: 1 }
+                ]}
                 onPress={handleFinish}
               >
                 <Text style={styles.buttonText}>Get Started</Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={styles.skipButton}
-                onPress={handleFinish}
-              >
-                <Text style={[styles.skipText, { color: theme.textSecondary }]}>Skip</Text>
-              </TouchableOpacity>
             </View>
-          </View>
+          </Animated.View>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -283,100 +391,185 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
   scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingTop: 48,
-    paddingBottom: 32,
+    padding: 20,
+    paddingTop: 40,
+  },
+  progressContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginBottom: 48,
+  },
+  progressDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
   stepContainer: {
-    flex: 1,
-    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emoji: {
+    fontSize: 64,
   },
   title: {
     fontSize: 32,
     fontWeight: '700',
+    textAlign: 'center',
     marginBottom: 12,
-    textAlign: 'center',
+    letterSpacing: -0.5,
   },
-  subtitle: {
+  description: {
     fontSize: 17,
-    lineHeight: 24,
-    marginBottom: 32,
     textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 40,
+    paddingHorizontal: 20,
+  },
+  inputSection: {
+    width: '100%',
+    marginBottom: 32,
+  },
+  label: {
+    fontSize: 17,
+    fontWeight: '600',
+    marginBottom: 12,
   },
   input: {
-    borderWidth: 1,
     borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     fontSize: 17,
-    marginBottom: 32,
+    borderWidth: 1,
   },
   habitsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
     marginBottom: 32,
-  },
-  habitCard: {
-    width: '47%',
-    borderWidth: 2,
-    borderRadius: 16,
-    padding: 20,
-    alignItems: 'center',
-    minHeight: 120,
     justifyContent: 'center',
   },
+  habitCard: {
+    width: 110,
+    height: 110,
+    borderRadius: 16,
+    padding: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
   habitIcon: {
-    fontSize: 40,
+    fontSize: 36,
     marginBottom: 8,
   },
   habitName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     textAlign: 'center',
   },
-  reminderToggle: {
-    borderWidth: 1,
+  checkBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    width: 24,
+    height: 24,
     borderRadius: 12,
-    paddingVertical: 20,
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
   },
-  reminderText: {
+  reminderCard: {
+    width: '100%',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 32,
+    borderWidth: 1,
+  },
+  reminderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  reminderInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  reminderLabel: {
     fontSize: 17,
     fontWeight: '600',
   },
+  toggle: {
+    width: 52,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E5E7EB',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleThumb: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+  },
+  toggleThumbActive: {
+    alignSelf: 'flex-end',
+  },
   timeButton: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 20,
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 32,
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginTop: 16,
+    borderWidth: 1,
   },
   timeText: {
-    fontSize: 24,
+    fontSize: 17,
     fontWeight: '600',
   },
-  buttonContainer: {
-    gap: 12,
-  },
   button: {
-    borderRadius: 12,
-    paddingVertical: 18,
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+    minWidth: 200,
   },
   buttonText: {
     color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '600',
   },
-  skipButton: {
-    paddingVertical: 12,
+  buttonSecondary: {
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
+    borderWidth: 1.5,
+  },
+  buttonTextSecondary: {
+    fontSize: 17,
+    fontWeight: '600',
+  },
+  buttonRow: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  skipButton: {
+    marginTop: 16,
+    paddingVertical: 12,
   },
   skipText: {
     fontSize: 16,
+    fontWeight: '500',
   },
 });

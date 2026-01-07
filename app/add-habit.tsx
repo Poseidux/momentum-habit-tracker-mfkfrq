@@ -1,4 +1,6 @@
 
+import { useHabits } from '@/contexts/HabitContext';
+import { colors, habitColors, habitIcons } from '@/styles/commonStyles';
 import React, { useState } from 'react';
 import {
   View,
@@ -11,89 +13,67 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { Stack, router } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Haptics from 'expo-haptics';
-import { colors, habitColors, habitIcons } from '@/styles/commonStyles';
-import { useHabits } from '@/contexts/HabitContext';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Stack, router } from 'expo-router';
 import { Habit } from '@/types/habit';
+import { IconSymbol } from '@/components/IconSymbol';
 
-const DAYS_OF_WEEK = [
-  { label: 'Mon', value: 1, name: 'Monday' },
-  { label: 'Tue', value: 2, name: 'Tuesday' },
-  { label: 'Wed', value: 3, name: 'Wednesday' },
-  { label: 'Thu', value: 4, name: 'Thursday' },
-  { label: 'Fri', value: 5, name: 'Friday' },
-  { label: 'Sat', value: 6, name: 'Saturday' },
-  { label: 'Sun', value: 0, name: 'Sunday' },
-];
+const DAYS_OF_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export default function AddHabitScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? colors.dark : colors.light;
-
   const { addHabit } = useHabits();
 
   const [name, setName] = useState('');
-  const [selectedColor, setSelectedColor] = useState(habitColors[0]);
-  const [selectedIcon, setSelectedIcon] = useState(habitIcons[0]);
   const [schedule, setSchedule] = useState<'daily' | 'specific'>('daily');
-  const [selectedDays, setSelectedDays] = useState<Set<number>>(new Set([0, 1, 2, 3, 4, 5, 6]));
-  const [hasReminder, setHasReminder] = useState(false);
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [reminderEnabled, setReminderEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState(new Date());
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [validationError, setValidationError] = useState('');
+  const [selectedColor, setSelectedColor] = useState(habitColors[0]);
+  const [selectedIcon, setSelectedIcon] = useState(habitIcons[0]);
 
   const toggleDay = (day: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    const newDays = new Set(selectedDays);
-    if (newDays.has(day)) {
-      newDays.delete(day);
-    } else {
-      newDays.add(day);
-    }
-    setSelectedDays(newDays);
-    setValidationError('');
+    setSelectedDays(prev =>
+      prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+    );
   };
 
   const handleSave = async () => {
-    // Validation
     if (!name.trim()) {
-      setValidationError('Please enter a habit name');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', 'Please enter a habit name');
       return;
     }
 
-    if (schedule === 'specific' && selectedDays.size === 0) {
-      setValidationError('Select at least one day');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    if (schedule === 'specific' && selectedDays.length === 0) {
+      Alert.alert('Error', 'Please select at least one day');
       return;
     }
 
-    // Success haptic
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-    const habit: Habit = {
-      id: `habit-${Date.now()}`,
+    const newHabit: Habit = {
+      id: Date.now().toString(),
       name: name.trim(),
       color: selectedColor,
       icon: selectedIcon,
       schedule,
-      scheduledDays: schedule === 'specific' ? Array.from(selectedDays) : undefined,
-      reminderTime: hasReminder
+      scheduledDays: schedule === 'specific' ? selectedDays : undefined,
+      reminderTime: reminderEnabled
         ? `${reminderTime.getHours().toString().padStart(2, '0')}:${reminderTime.getMinutes().toString().padStart(2, '0')}`
         : undefined,
       completions: [],
       createdAt: new Date().toISOString(),
     };
 
-    await addHabit(habit);
+    await addHabit(newHabit);
     router.back();
   };
-
-  const isFormValid = name.trim() && (schedule === 'daily' || selectedDays.size > 0);
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
@@ -104,25 +84,17 @@ export default function AddHabitScreen() {
           headerStyle: { backgroundColor: theme.background },
           headerTintColor: theme.text,
           headerShadowVisible: false,
-          animation: 'slide_from_bottom',
         }}
       />
 
       <ScrollView
+        style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
       >
-        {/* Validation Error */}
-        {validationError ? (
-          <View style={[styles.errorBanner, { backgroundColor: theme.error + '20' }]}>
-            <Text style={[styles.errorText, { color: theme.error }]}>{validationError}</Text>
-          </View>
-        ) : null}
-
         {/* Habit Name */}
         <View style={styles.section}>
-          <Text style={[styles.label, { color: theme.text }]}>Habit Name *</Text>
+          <Text style={[styles.label, { color: theme.text }]}>Habit Name</Text>
           <TextInput
             style={[
               styles.input,
@@ -130,67 +102,55 @@ export default function AddHabitScreen() {
                 backgroundColor: theme.card,
                 color: theme.text,
                 borderColor: theme.border,
-              },
+              }
             ]}
-            placeholder="Drink water"
+            placeholder="e.g., Drink water"
             placeholderTextColor={theme.textSecondary}
             value={name}
-            onChangeText={(text) => {
-              setName(text);
-              setValidationError('');
-            }}
-            autoFocus
+            onChangeText={setName}
             maxLength={50}
           />
         </View>
 
         {/* Schedule */}
         <View style={styles.section}>
-          <Text style={[styles.label, { color: theme.text }]}>Schedule *</Text>
-          
-          <View style={styles.scheduleButtons}>
+          <Text style={[styles.label, { color: theme.text }]}>Schedule</Text>
+          <View style={styles.segmentedControl}>
             <TouchableOpacity
               style={[
-                styles.scheduleButton,
-                {
-                  backgroundColor: schedule === 'daily' ? theme.primary : theme.card,
-                  borderColor: theme.border,
-                },
+                styles.segment,
+                schedule === 'daily' && { backgroundColor: theme.primary },
+                { borderColor: theme.border }
               ]}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setSchedule('daily');
-                setValidationError('');
               }}
             >
               <Text
                 style={[
-                  styles.scheduleButtonText,
-                  { color: schedule === 'daily' ? '#FFFFFF' : theme.text },
+                  styles.segmentText,
+                  { color: schedule === 'daily' ? '#FFFFFF' : theme.text }
                 ]}
               >
                 Daily
               </Text>
             </TouchableOpacity>
-
             <TouchableOpacity
               style={[
-                styles.scheduleButton,
-                {
-                  backgroundColor: schedule === 'specific' ? theme.primary : theme.card,
-                  borderColor: theme.border,
-                },
+                styles.segment,
+                schedule === 'specific' && { backgroundColor: theme.primary },
+                { borderColor: theme.border }
               ]}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                 setSchedule('specific');
-                setValidationError('');
               }}
             >
               <Text
                 style={[
-                  styles.scheduleButtonText,
-                  { color: schedule === 'specific' ? '#FFFFFF' : theme.text },
+                  styles.segmentText,
+                  { color: schedule === 'specific' ? '#FFFFFF' : theme.text }
                 ]}
               >
                 Specific Days
@@ -199,26 +159,27 @@ export default function AddHabitScreen() {
           </View>
 
           {schedule === 'specific' && (
-            <View style={styles.daysGrid}>
-              {DAYS_OF_WEEK.map(day => (
+            <View style={styles.daysContainer}>
+              {DAYS_OF_WEEK.map((day, index) => (
                 <TouchableOpacity
-                  key={day.value}
+                  key={index}
                   style={[
-                    styles.dayButton,
+                    styles.dayChip,
+                    selectedDays.includes(index) && { backgroundColor: theme.primary },
                     {
-                      backgroundColor: selectedDays.has(day.value) ? theme.primary : theme.card,
-                      borderColor: theme.border,
-                    },
+                      borderColor: selectedDays.includes(index) ? theme.primary : theme.border,
+                      backgroundColor: selectedDays.includes(index) ? theme.primary : theme.card,
+                    }
                   ]}
-                  onPress={() => toggleDay(day.value)}
+                  onPress={() => toggleDay(index)}
                 >
                   <Text
                     style={[
-                      styles.dayButtonText,
-                      { color: selectedDays.has(day.value) ? '#FFFFFF' : theme.text },
+                      styles.dayText,
+                      { color: selectedDays.includes(index) ? '#FFFFFF' : theme.text }
                     ]}
                   >
-                    {day.label}
+                    {day}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -228,44 +189,48 @@ export default function AddHabitScreen() {
 
         {/* Reminder */}
         <View style={styles.section}>
-          <Text style={[styles.label, { color: theme.text }]}>Reminder</Text>
-          
-          <TouchableOpacity
-            style={[
-              styles.reminderToggle,
-              {
-                backgroundColor: hasReminder ? theme.primary : theme.card,
-                borderColor: theme.border,
-              },
-            ]}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              setHasReminder(!hasReminder);
-            }}
-          >
-            <Text
-              style={[
-                styles.reminderText,
-                { color: hasReminder ? '#FFFFFF' : theme.text },
-              ]}
-            >
-              {hasReminder ? '✓ Reminder Enabled' : 'Enable Reminder'}
-            </Text>
-          </TouchableOpacity>
-
-          {hasReminder && (
+          <View style={styles.reminderHeader}>
+            <Text style={[styles.label, { color: theme.text }]}>Reminder</Text>
             <TouchableOpacity
-              style={[styles.timeButton, { backgroundColor: theme.card, borderColor: theme.border }]}
+              style={[
+                styles.toggle,
+                reminderEnabled && { backgroundColor: theme.primary }
+              ]}
               onPress={() => {
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                setShowTimePicker(true);
+                setReminderEnabled(!reminderEnabled);
               }}
             >
+              <View
+                style={[
+                  styles.toggleThumb,
+                  reminderEnabled && styles.toggleThumbActive
+                ]}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {reminderEnabled && (
+            <TouchableOpacity
+              style={[
+                styles.timeButton,
+                {
+                  backgroundColor: theme.card,
+                  borderColor: theme.border,
+                }
+              ]}
+              onPress={() => setShowTimePicker(true)}
+            >
+              <IconSymbol
+                android_material_icon_name="access-time"
+                ios_icon_name="clock"
+                size={20}
+                color={theme.primary}
+              />
               <Text style={[styles.timeText, { color: theme.text }]}>
                 {reminderTime.toLocaleTimeString('en-US', {
                   hour: 'numeric',
                   minute: '2-digit',
-                  hour12: true,
                 })}
               </Text>
             </TouchableOpacity>
@@ -277,54 +242,60 @@ export default function AddHabitScreen() {
               mode="time"
               is24Hour={false}
               display="default"
-              onChange={(event, selectedDate) => {
+              onChange={(event, selectedTime) => {
                 setShowTimePicker(Platform.OS === 'ios');
-                if (selectedDate) {
-                  setReminderTime(selectedDate);
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                if (selectedTime) {
+                  setReminderTime(selectedTime);
                 }
               }}
             />
           )}
         </View>
 
-        {/* Color Picker */}
+        {/* Color */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: theme.text }]}>Color</Text>
           <View style={styles.colorGrid}>
-            {habitColors.map(color => (
+            {habitColors.map((color) => (
               <TouchableOpacity
                 key={color}
                 style={[
-                  styles.colorButton,
-                  {
-                    backgroundColor: color,
-                    borderWidth: selectedColor === color ? 3 : 0,
-                    borderColor: theme.text,
-                  },
+                  styles.colorOption,
+                  { backgroundColor: color },
+                  selectedColor === color && styles.colorOptionSelected
                 ]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
                   setSelectedColor(color);
                 }}
-              />
+              >
+                {selectedColor === color && (
+                  <IconSymbol
+                    android_material_icon_name="check"
+                    ios_icon_name="checkmark"
+                    size={20}
+                    color="#FFFFFF"
+                  />
+                )}
+              </TouchableOpacity>
             ))}
           </View>
         </View>
 
-        {/* Icon Picker */}
+        {/* Icon */}
         <View style={styles.section}>
           <Text style={[styles.label, { color: theme.text }]}>Icon</Text>
           <View style={styles.iconGrid}>
-            {habitIcons.map(icon => (
+            {habitIcons.map((icon) => (
               <TouchableOpacity
                 key={icon}
                 style={[
-                  styles.iconButton,
+                  styles.iconOption,
                   {
-                    backgroundColor: selectedIcon === icon ? theme.primary : theme.card,
-                    borderColor: theme.border,
-                  },
+                    backgroundColor: theme.card,
+                    borderColor: selectedIcon === icon ? theme.primary : theme.border,
+                    borderWidth: selectedIcon === icon ? 2 : 1,
+                  }
                 ]}
                 onPress={() => {
                   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -338,21 +309,13 @@ export default function AddHabitScreen() {
         </View>
       </ScrollView>
 
-      {/* Sticky Save Button */}
-      <View style={[styles.bottomBar, { backgroundColor: theme.background, borderTopColor: theme.border }]}>
+      {/* Save Button */}
+      <View style={[styles.footer, { backgroundColor: theme.background, borderTopColor: theme.border }]}>
         <TouchableOpacity
-          style={[
-            styles.saveButton,
-            {
-              backgroundColor: isFormValid ? theme.primary : theme.highlight,
-            },
-          ]}
+          style={[styles.saveButton, { backgroundColor: theme.primary }]}
           onPress={handleSave}
-          disabled={!isFormValid}
         >
-          <Text style={[styles.saveButtonText, { opacity: isFormValid ? 1 : 0.5 }]}>
-            Save Habit
-          </Text>
+          <Text style={styles.saveButtonText}>Save Habit</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -363,20 +326,12 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
   scrollContent: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 120,
-  },
-  errorBanner: {
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-  },
-  errorText: {
-    fontSize: 15,
-    fontWeight: '600',
-    textAlign: 'center',
+    padding: 20,
+    paddingBottom: 100,
   },
   section: {
     marginBottom: 32,
@@ -387,62 +342,77 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   input: {
-    borderWidth: 1,
     borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     fontSize: 17,
+    borderWidth: 1,
   },
-  scheduleButtons: {
+  segmentedControl: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 16,
   },
-  scheduleButton: {
+  segment: {
     flex: 1,
-    borderWidth: 1,
+    paddingVertical: 12,
     borderRadius: 12,
-    paddingVertical: 16,
     alignItems: 'center',
+    borderWidth: 1,
   },
-  scheduleButtonText: {
-    fontSize: 17,
+  segmentText: {
+    fontSize: 16,
     fontWeight: '600',
   },
-  daysGrid: {
+  daysContainer: {
     flexDirection: 'row',
-    gap: 8,
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 16,
   },
-  dayButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
+  dayChip: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    borderWidth: 1.5,
   },
-  dayButtonText: {
+  dayText: {
     fontSize: 15,
     fontWeight: '600',
   },
-  reminderToggle: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 16,
+  reminderHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
   },
-  reminderText: {
-    fontSize: 17,
-    fontWeight: '600',
+  toggle: {
+    width: 52,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#E5E7EB',
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleThumb: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+  },
+  toggleThumbActive: {
+    alignSelf: 'flex-end',
   },
   timeButton: {
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingVertical: 20,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginTop: 12,
+    borderWidth: 1,
   },
   timeText: {
-    fontSize: 24,
+    fontSize: 17,
     fontWeight: '600',
   },
   colorGrid: {
@@ -450,41 +420,60 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 12,
   },
-  colorButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+  colorOption: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  colorOptionSelected: {
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
   },
   iconGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
   },
-  iconButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    borderWidth: 1,
+  iconOption: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
   },
   iconText: {
-    fontSize: 28,
+    fontSize: 26,
   },
-  bottomBar: {
+  footer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 24,
-    paddingVertical: 16,
-    paddingBottom: Platform.OS === 'ios' ? 32 : 16,
+    padding: 20,
     borderTopWidth: 1,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+      },
+      android: {
+        elevation: 8,
+      },
+      web: {
+        boxShadow: '0 -2px 12px rgba(0, 0, 0, 0.08)',
+      },
+    }),
   },
   saveButton: {
-    borderRadius: 12,
-    paddingVertical: 18,
+    borderRadius: 14,
+    paddingVertical: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
   },
   saveButtonText: {
     color: '#FFFFFF',

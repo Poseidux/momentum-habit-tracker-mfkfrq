@@ -1,6 +1,6 @@
 
 import { useHabits } from '@/contexts/HabitContext';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   getTodayString,
   isHabitScheduledForDate,
@@ -22,18 +22,57 @@ import {
   Platform,
 } from 'react-native';
 import { router } from 'expo-router';
+import { IconSymbol } from '@/components/IconSymbol';
+import { useAuth } from '@/contexts/AuthContext';
+import { authenticatedGet, authenticatedPost } from '@/utils/api';
 
 export default function TodayScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? colors.dark : colors.light;
   const { habits, updateHabit } = useHabits();
+  const { user } = useAuth();
   const [today] = useState(getTodayString());
+  const [userGroups, setUserGroups] = useState<any[]>([]);
 
   const todayHabits = habits.filter((h) => isHabitScheduledForDate(h, new Date()));
   const completedCount = todayHabits.filter((h) => h.completions?.includes(today)).length;
   const totalCount = todayHabits.length;
-  const progress = totalCount > 0 ? completedCount / totalCount : 0;
+  const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+
+  // Fetch user's groups to sync completions
+  useEffect(() => {
+    if (user) {
+      fetchUserGroups();
+    }
+  }, [user]);
+
+  const fetchUserGroups = async () => {
+    try {
+      const groups = await authenticatedGet<any[]>('/api/groups');
+      setUserGroups(groups);
+    } catch (error) {
+      console.error('[Home] Error fetching groups:', error);
+      // Silently fail - groups are optional
+    }
+  };
+
+  const syncCompletionToGroups = async (habitName: string, completed: boolean) => {
+    // Sync completion to all groups the user is in
+    for (const group of userGroups) {
+      try {
+        await authenticatedPost(`/api/groups/${group.id}/completions`, {
+          habitName,
+          completed,
+          date: today,
+        });
+        console.log(`[Home] Synced ${habitName} completion to group ${group.name}`);
+      } catch (error) {
+        console.error(`[Home] Error syncing to group ${group.name}:`, error);
+        // Continue with other groups even if one fails
+      }
+    }
+  };
 
   const handleToggleCompletion = async (habitId: string) => {
     const habit = habits.find((h) => h.id === habitId);
@@ -42,6 +81,12 @@ export default function TodayScreen() {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const updated = toggleHabitCompletion(habit, today);
     updateHabit(updated);
+
+    // Sync to backend groups if user is authenticated
+    if (user && userGroups.length > 0) {
+      const isCompleted = updated.completions?.includes(today);
+      await syncCompletionToGroups(habit.name, isCompleted || false);
+    }
   };
 
   const handleEditHabit = (habitId: string) => {
@@ -57,7 +102,10 @@ export default function TodayScreen() {
   };
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
+    <SafeAreaView 
+      style={[styles.container, { backgroundColor: theme.background }]} 
+      edges={['top']}
+    >
       <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
@@ -71,17 +119,35 @@ export default function TodayScreen() {
         </Animated.View>
 
         {totalCount > 0 && (
-          <Animated.View entering={FadeIn.delay(100)} style={styles.summaryCard}>
+          <Animated.View 
+            entering={FadeIn.delay(100)} 
+            style={[
+              styles.summaryCard,
+              { 
+                backgroundColor: theme.card,
+                borderWidth: 1,
+                borderColor: theme.cardBorder,
+              }
+            ]}
+          >
             <View style={styles.summaryContent}>
               <View style={styles.summaryText}>
                 <Text style={[styles.summaryTitle, { color: theme.text }]}>
-                  {completedCount} of {totalCount} completed
+                  <Text style={{ fontWeight: '700', fontSize: 24 }}>{completedCount}</Text>
+                  <Text style={{ color: theme.textSecondary }}> of </Text>
+                  <Text style={{ fontWeight: '700', fontSize: 24 }}>{totalCount}</Text>
                 </Text>
                 <Text style={[styles.summarySubtitle, { color: theme.textSecondary }]}>
-                  {progress === 1 ? "Perfect day! 🎉" : "Keep going!"}
+                  {progress === 100 ? "Perfect day! 🎉" : "habits completed"}
                 </Text>
               </View>
-              <ProgressRing progress={progress} size={60} strokeWidth={6} />
+              <ProgressRing 
+                progress={progress} 
+                size={72} 
+                strokeWidth={8}
+                color={theme.primary}
+                backgroundColor={theme.border}
+              />
             </View>
           </Animated.View>
         )}
@@ -101,7 +167,7 @@ export default function TodayScreen() {
                     styles.habitCard,
                     { 
                       backgroundColor: theme.card,
-                      borderColor: isCompleted ? habit.color : theme.border,
+                      borderColor: isCompleted ? habit.color : theme.cardBorder,
                       borderWidth: isCompleted ? 2 : 1,
                     }
                   ]}
@@ -111,7 +177,7 @@ export default function TodayScreen() {
                 >
                   <View style={styles.habitHeader}>
                     <View style={styles.habitInfo}>
-                      <View style={[styles.iconCircle, { backgroundColor: habit.color + '20' }]}>
+                      <View style={[styles.iconCircle, { backgroundColor: habit.color + '15' }]}>
                         <Text style={styles.icon}>{habit.icon}</Text>
                       </View>
                       <View style={styles.habitText}>
@@ -129,11 +195,20 @@ export default function TodayScreen() {
                       style={[
                         styles.checkButton,
                         {
-                          backgroundColor: isCompleted ? habit.color : theme.border + '40',
+                          backgroundColor: isCompleted ? habit.color : theme.highlight,
+                          borderWidth: isCompleted ? 0 : 1.5,
+                          borderColor: theme.border,
                         }
                       ]}
                     >
-                      {isCompleted && <Text style={styles.checkmark}>✓</Text>}
+                      {isCompleted && (
+                        <IconSymbol
+                          android_material_icon_name="check"
+                          ios_icon_name="checkmark"
+                          size={20}
+                          color="#FFFFFF"
+                        />
+                      )}
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -148,19 +223,34 @@ export default function TodayScreen() {
               No habits for today
             </Text>
             <Text style={[styles.emptySubtitle, { color: theme.textSecondary }]}>
-              Add your first habit to get started
+              Tap the + button below to add your first habit
             </Text>
           </Animated.View>
         )}
+
+        {/* Extra padding for floating button */}
+        <View style={{ height: 120 }} />
       </ScrollView>
 
-      <TouchableOpacity
-        style={[styles.fab, { backgroundColor: colors.primary }]}
-        onPress={() => router.push('/add-habit')}
-        activeOpacity={0.8}
-      >
-        <Text style={styles.fabIcon}>+</Text>
-      </TouchableOpacity>
+      {/* Floating Add Button with Circular Ring */}
+      <View style={styles.fabContainer}>
+        <View style={[styles.fabRing, { borderColor: theme.primary + '30' }]} />
+        <TouchableOpacity
+          style={[styles.fab, { backgroundColor: theme.primary }]}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            router.push('/add-habit');
+          }}
+          activeOpacity={0.8}
+        >
+          <IconSymbol
+            android_material_icon_name="add"
+            ios_icon_name="plus"
+            size={32}
+            color="#FFFFFF"
+          />
+        </TouchableOpacity>
+      </View>
     </SafeAreaView>
   );
 }
@@ -174,32 +264,37 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 20,
-    paddingBottom: 100,
+    paddingBottom: 20,
   },
   header: {
     marginBottom: 24,
   },
   date: {
-    fontSize: 14,
+    fontSize: 15,
     marginBottom: 4,
+    fontWeight: '500',
   },
   title: {
-    fontSize: 32,
+    fontSize: 36,
     fontWeight: '700',
+    letterSpacing: -0.5,
   },
   summaryCard: {
-    padding: 20,
-    borderRadius: 16,
-    marginBottom: 24,
+    padding: 24,
+    borderRadius: 20,
+    marginBottom: 28,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 8,
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
       },
       android: {
         elevation: 3,
+      },
+      web: {
+        boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
       },
     }),
   },
@@ -212,29 +307,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   summaryTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '600',
     marginBottom: 4,
   },
   summarySubtitle: {
-    fontSize: 14,
+    fontSize: 15,
   },
   habitsList: {
     gap: 12,
   },
   habitCard: {
-    padding: 16,
+    padding: 20,
     borderRadius: 16,
     marginBottom: 12,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.08,
-        shadowRadius: 4,
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
       },
       android: {
         elevation: 2,
+      },
+      web: {
+        boxShadow: '0 1px 8px rgba(0, 0, 0, 0.06)',
       },
     }),
   },
@@ -249,75 +347,84 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   iconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 12,
+    marginRight: 16,
   },
   icon: {
-    fontSize: 24,
+    fontSize: 26,
   },
   habitText: {
     flex: 1,
   },
   habitName: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '600',
     marginBottom: 2,
   },
   streak: {
-    fontSize: 13,
+    fontSize: 14,
+    marginTop: 2,
   },
   checkButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  checkmark: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-  },
   emptyState: {
     alignItems: 'center',
-    marginTop: 60,
+    marginTop: 80,
+    paddingHorizontal: 40,
   },
   emptyTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '600',
     marginBottom: 8,
+    textAlign: 'center',
   },
   emptySubtitle: {
-    fontSize: 15,
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  fabContainer: {
+    position: 'absolute',
+    bottom: 100,
+    alignSelf: 'center',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  fabRing: {
+    position: 'absolute',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 2,
   },
   fab: {
-    position: 'absolute',
-    bottom: 90,
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 64,
+    height: 64,
+    borderRadius: 32,
     justifyContent: 'center',
     alignItems: 'center',
     ...Platform.select({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.3,
-        shadowRadius: 8,
+        shadowOpacity: 0.25,
+        shadowRadius: 12,
       },
       android: {
-        elevation: 6,
+        elevation: 8,
+      },
+      web: {
+        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.25)',
       },
     }),
-  },
-  fabIcon: {
-    color: '#fff',
-    fontSize: 32,
-    fontWeight: '300',
   },
 });

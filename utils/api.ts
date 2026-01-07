@@ -29,11 +29,14 @@ import * as SecureStore from "expo-secure-store";
  */
 export const BACKEND_URL = Constants.expoConfig?.extra?.backendUrl || "";
 
+// Log backend URL at startup for debugging
+console.log('[API] Backend URL configured:', BACKEND_URL);
+
 /**
  * Bearer token storage key
- * TODO: Replace "your-app" with actual app name to match auth-client.ts
+ * Matches the auth-client.ts configuration
  */
-const BEARER_TOKEN_KEY = "your-app_bearer_token";
+const BEARER_TOKEN_KEY = "natively_bearer_token";
 
 /**
  * Check if backend is properly configured
