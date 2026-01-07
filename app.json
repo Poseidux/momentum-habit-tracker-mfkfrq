@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Momentum",
-    "slug": "momentum-habit-tracker",
+    "name": "Momentum Habit Tracker",
+    "slug": "Momentum Habit Tracker",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/final_quest_240x240.png",
@@ -51,5 +51,6 @@
     "extra": {
       "backendUrl": "https://764ynjbqfq96w5kys7nc7ggyxbwuyvyq.app.specular.dev"
     }
-  }
+  },
+  "scheme": "Momentum Habit Tracker"
 }
