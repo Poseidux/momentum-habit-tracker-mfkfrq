@@ -29,11 +29,11 @@ export default function EditHabitScreen() {
   const scheme = useColorScheme();
   const isDark = scheme === 'dark';
   const theme = isDark ? colors.dark : colors.light;
-  const { habitId } = useLocalSearchParams<{ habitId: string }>();
+  const { id } = useLocalSearchParams<{ id: string }>();
   const { habits, updateHabit, deleteHabit } = useHabits();
   const { isPremium } = usePremium();
 
-  const habit = habits.find(h => h.id === habitId);
+  const habit = habits.find(h => h.id === id);
 
   const [name, setName] = useState('');
   const [schedule, setSchedule] = useState<'daily' | 'specific'>('daily');

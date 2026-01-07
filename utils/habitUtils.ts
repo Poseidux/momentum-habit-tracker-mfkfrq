@@ -57,42 +57,60 @@ export function getWeeklyStats(habits: Habit[]) {
 
   let totalCompleted = 0;
   let totalScheduled = 0;
+  const dailyCompletions: { [key: string]: number } = {};
 
   for (let i = 0; i < 7; i++) {
     const date = new Date(weekStart);
     date.setDate(weekStart.getDate() + i);
     const dateStr = date.toISOString().split('T')[0];
+    dailyCompletions[dateStr] = 0;
 
     habits.forEach(habit => {
       if (isHabitScheduledForDate(habit, dateStr)) {
         totalScheduled++;
         if (habit.completions.includes(dateStr)) {
           totalCompleted++;
+          dailyCompletions[dateStr]++;
         }
       }
     });
   }
 
-  return { totalCompleted, totalScheduled };
+  // Find best day
+  let bestDay = 'None';
+  let maxCompletions = 0;
+  const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  
+  Object.entries(dailyCompletions).forEach(([dateStr, count]) => {
+    if (count > maxCompletions) {
+      maxCompletions = count;
+      const date = new Date(dateStr + 'T00:00:00');
+      bestDay = dayNames[date.getDay()];
+    }
+  });
+
+  const weeklyCompletionRate = totalScheduled > 0 ? (totalCompleted / totalScheduled) * 100 : 0;
+
+  return { 
+    completedThisWeek: totalCompleted, 
+    totalScheduled,
+    bestDay,
+    weeklyCompletionRate
+  };
 }
 
-export function getCompletionPercentage(habit: Habit, days: number = 30): number {
-  const today = new Date();
+export function getCompletionPercentage(habits: Habit[], dateString: string): number {
   let completed = 0;
   let scheduled = 0;
 
-  for (let i = 0; i < days; i++) {
-    const date = new Date(today);
-    date.setDate(today.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-
-    if (isHabitScheduledForDate(habit, dateStr)) {
+  habits.forEach(habit => {
+    if (isHabitScheduledForDate(habit, dateString)) {
       scheduled++;
-      if (habit.completions.includes(dateStr)) {
+      if (habit.completions.includes(dateString)) {
         completed++;
       }
     }
-  }
+  });
 
   return scheduled > 0 ? Math.round((completed / scheduled) * 100) : 0;
 }
