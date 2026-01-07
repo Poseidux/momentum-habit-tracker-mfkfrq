@@ -14,54 +14,59 @@ Notifications.setNotificationHandler({
 export async function requestNotificationPermissions(): Promise<boolean> {
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
-
+  
   if (existingStatus !== 'granted') {
     const { status } = await Notifications.requestPermissionsAsync();
     finalStatus = status;
   }
-
+  
   return finalStatus === 'granted';
 }
 
 export async function scheduleHabitNotification(habit: Habit): Promise<void> {
   if (!habit.reminderTime) return;
-
+  
+  await cancelHabitNotification(habit.id);
+  
   const [hours, minutes] = habit.reminderTime.split(':').map(Number);
-
-  if (habit.schedule === 'daily') {
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: 'Momentum Reminder',
-        body: `Time to complete: ${habit.name}`,
-        data: { habitId: habit.id },
-      },
-      trigger: {
-        hour: hours,
-        minute: minutes,
-        repeats: true,
-      },
-    });
-  } else if (habit.schedule === 'specific' && Array.isArray(habit.scheduledDays)) {
+  
+  const trigger: any = {
+    hour: hours,
+    minute: minutes,
+    repeats: true,
+  };
+  
+  if (habit.schedule === 'specific' && habit.scheduledDays) {
+    // Schedule for specific days
     for (const day of habit.scheduledDays) {
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: 'Momentum Reminder',
-          body: `Time to complete: ${habit.name}`,
+          title: '⏰ Time for your habit!',
+          body: habit.name,
           data: { habitId: habit.id },
         },
         trigger: {
-          weekday: day + 1, // Expo uses 1-7 (Sun-Sat)
-          hour: hours,
-          minute: minutes,
-          repeats: true,
+          ...trigger,
+          weekday: day + 1, // iOS uses 1-7 for Sun-Sat
         },
       });
     }
+  } else {
+    // Daily notification
+    await Notifications.scheduleNotificationAsync({
+      content: {
+        title: '⏰ Time for your habit!',
+        body: habit.name,
+        data: { habitId: habit.id },
+      },
+      trigger,
+    });
   }
 }
 
 export async function cancelHabitNotification(habitId: string): Promise<void> {
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  
   for (const notification of scheduled) {
     if (notification.content.data?.habitId === habitId) {
       await Notifications.cancelScheduledNotificationAsync(notification.identifier);
@@ -71,4 +76,14 @@ export async function cancelHabitNotification(habitId: string): Promise<void> {
 
 export async function cancelAllHabitNotifications(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
+}
+
+export async function rescheduleAllHabitNotifications(habits: Habit[]): Promise<void> {
+  await cancelAllHabitNotifications();
+  
+  for (const habit of habits) {
+    if (habit.reminderTime) {
+      await scheduleHabitNotification(habit);
+    }
+  }
 }

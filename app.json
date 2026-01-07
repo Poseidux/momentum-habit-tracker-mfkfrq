@@ -1,39 +1,36 @@
 
 {
   "expo": {
-    "name": "Momentum Habit Tracker",
-    "slug": "Momentum",
+    "name": "Momentum",
+    "slug": "momentum-habit-tracker",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/final_quest_240x240.png",
+    "icon": "./assets/images/app-icon.png",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/images/final_quest_240x240.png",
+      "image": "./assets/images/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#000000"
+      "backgroundColor": "#FFFFFF"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.momentum.habittracker",
       "infoPlist": {
+        "UIBackgroundModes": ["remote-notification"],
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/final_quest_240x240.png",
-        "backgroundColor": "#000000"
+        "foregroundImage": "./assets/images/app-icon.png",
+        "backgroundColor": "#FFFFFF"
       },
-      "package": "com.momentum.habittracker",
       "permissions": [
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.POST_NOTIFICATIONS"
-      ]
-    },
-    "web": {
-      "bundler": "metro",
-      "favicon": "./assets/images/final_quest_240x240.png"
+      ],
+      "package": "com.momentum.habittracker"
     },
     "plugins": [
       "expo-font",
@@ -41,7 +38,8 @@
       [
         "expo-notifications",
         {
-          "color": "#ffffff"
+          "icon": "./assets/images/notification-icon.png",
+          "color": "#6366F1"
         }
       ]
     ],

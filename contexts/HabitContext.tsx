@@ -1,159 +1,119 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Habit } from '@/types/habit';
-import { scheduleHabitNotification, cancelHabitNotification } from '@/utils/notifications';
-
-interface Settings {
-  notificationsEnabled: boolean;
-}
+import { Habit, UserSettings } from '@/types/habit';
+import { loadHabits, saveHabits, loadSettings, saveSettings } from '@/utils/storage';
+import { scheduleHabitNotification, cancelHabitNotification, rescheduleAllHabitNotifications } from '@/utils/notifications';
 
 interface HabitContextType {
   habits: Habit[];
+  settings: UserSettings;
   loading: boolean;
-  settings: Settings;
   addHabit: (habit: Omit<Habit, 'id' | 'completions' | 'createdAt'>) => Promise<void>;
   updateHabit: (habit: Habit) => Promise<void>;
   deleteHabit: (id: string) => Promise<void>;
   toggleCompletion: (habitId: string, date: string) => Promise<void>;
-  refreshHabits: () => Promise<void>;
-  updateSettings: (settings: Partial<Settings>) => Promise<void>;
-  resetAll: () => Promise<void>;
+  updateSettings: (newSettings: Partial<UserSettings>) => Promise<void>;
 }
 
 const HabitContext = createContext<HabitContextType | undefined>(undefined);
 
-const HABITS_KEY = '@momentum_habits';
-const SETTINGS_KEY = '@momentum_settings';
-
 export function HabitProvider({ children }: { children: ReactNode }) {
   const [habits, setHabits] = useState<Habit[]>([]);
-  const [settings, setSettings] = useState<Settings>({ notificationsEnabled: false });
+  const [settings, setSettings] = useState<UserSettings>({
+    notificationsEnabled: false,
+    darkMode: 'auto',
+    hasCompletedOnboarding: false,
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const loadData = async () => {
-    try {
-      const [storedHabits, storedSettings] = await Promise.all([
-        AsyncStorage.getItem(HABITS_KEY),
-        AsyncStorage.getItem(SETTINGS_KEY),
-      ]);
-      
-      if (storedHabits) {
-        setHabits(JSON.parse(storedHabits));
-      }
-      
-      if (storedSettings) {
-        setSettings(JSON.parse(storedSettings));
-      }
-    } catch (error) {
-      console.error('Failed to load data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  async function loadData() {
+    const [loadedHabits, loadedSettings] = await Promise.all([
+      loadHabits(),
+      loadSettings(),
+    ]);
+    
+    setHabits(loadedHabits);
+    setSettings(loadedSettings);
+    setLoading(false);
+  }
 
-  const saveHabits = async (newHabits: Habit[]) => {
-    try {
-      await AsyncStorage.setItem(HABITS_KEY, JSON.stringify(newHabits));
-      setHabits(newHabits);
-    } catch (error) {
-      console.error('Failed to save habits:', error);
-    }
-  };
-
-  const addHabit = async (habitData: Omit<Habit, 'id' | 'completions' | 'createdAt'>) => {
+  async function addHabit(habitData: Omit<Habit, 'id' | 'completions' | 'createdAt'>) {
     const newHabit: Habit = {
       ...habitData,
       id: Date.now().toString(),
-      completions: [],
+      completions: {},
       createdAt: new Date().toISOString(),
     };
-
-    if (habitData.reminderTime && settings.notificationsEnabled) {
+    
+    const updatedHabits = [...habits, newHabit];
+    setHabits(updatedHabits);
+    await saveHabits(updatedHabits);
+    
+    if (settings.notificationsEnabled && newHabit.reminderTime) {
       await scheduleHabitNotification(newHabit);
     }
+  }
 
-    await saveHabits([...habits, newHabit]);
-  };
-
-  const updateHabit = async (updatedHabit: Habit) => {
-    const updated = habits.map(h => h.id === updatedHabit.id ? updatedHabit : h);
+  async function updateHabit(habit: Habit) {
+    const updatedHabits = habits.map(h => h.id === habit.id ? habit : h);
+    setHabits(updatedHabits);
+    await saveHabits(updatedHabits);
     
-    await cancelHabitNotification(updatedHabit.id);
-    if (updatedHabit.reminderTime && settings.notificationsEnabled) {
-      await scheduleHabitNotification(updatedHabit);
+    if (settings.notificationsEnabled && habit.reminderTime) {
+      await scheduleHabitNotification(habit);
+    } else {
+      await cancelHabitNotification(habit.id);
     }
+  }
 
-    await saveHabits(updated);
-  };
-
-  const deleteHabit = async (id: string) => {
+  async function deleteHabit(id: string) {
+    const updatedHabits = habits.filter(h => h.id !== id);
+    setHabits(updatedHabits);
+    await saveHabits(updatedHabits);
     await cancelHabitNotification(id);
-    await saveHabits(habits.filter(h => h.id !== id));
-  };
+  }
 
-  const toggleCompletion = async (habitId: string, date: string) => {
-    const updated = habits.map(habit => {
+  async function toggleCompletion(habitId: string, date: string) {
+    const updatedHabits = habits.map(habit => {
       if (habit.id === habitId) {
-        const completions = habit.completions.includes(date)
-          ? habit.completions.filter(d => d !== date)
-          : [...habit.completions, date];
+        const completions = { ...habit.completions };
+        completions[date] = !completions[date];
         return { ...habit, completions };
       }
       return habit;
     });
-    await saveHabits(updated);
-  };
+    
+    setHabits(updatedHabits);
+    await saveHabits(updatedHabits);
+  }
 
-  const refreshHabits = async () => {
-    await loadData();
-  };
-
-  const updateSettings = async (newSettings: Partial<Settings>) => {
-    try {
-      const updated = { ...settings, ...newSettings };
-      await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
-      setSettings(updated);
-    } catch (error) {
-      console.error('Failed to update settings:', error);
+  async function updateSettings(newSettings: Partial<UserSettings>) {
+    const updated = { ...settings, ...newSettings };
+    setSettings(updated);
+    await saveSettings(updated);
+    
+    if (updated.notificationsEnabled) {
+      await rescheduleAllHabitNotifications(habits);
     }
-  };
-
-  const resetAll = async () => {
-    try {
-      // Cancel all notifications
-      for (const habit of habits) {
-        await cancelHabitNotification(habit.id);
-      }
-      
-      // Clear storage
-      await AsyncStorage.multiRemove([HABITS_KEY, SETTINGS_KEY]);
-      
-      // Reset state
-      setHabits([]);
-      setSettings({ notificationsEnabled: false });
-    } catch (error) {
-      console.error('Failed to reset data:', error);
-    }
-  };
+  }
 
   return (
-    <HabitContext.Provider value={{
-      habits,
-      loading,
-      settings,
-      addHabit,
-      updateHabit,
-      deleteHabit,
-      toggleCompletion,
-      refreshHabits,
-      updateSettings,
-      resetAll,
-    }}>
+    <HabitContext.Provider
+      value={{
+        habits,
+        settings,
+        loading,
+        addHabit,
+        updateHabit,
+        deleteHabit,
+        toggleCompletion,
+        updateSettings,
+      }}
+    >
       {children}
     </HabitContext.Provider>
   );

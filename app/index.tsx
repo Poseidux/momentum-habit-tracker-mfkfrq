@@ -2,10 +2,13 @@
 import { Redirect } from "expo-router";
 import { useEffect, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { View, ActivityIndicator } from "react-native";
+import { View, ActivityIndicator, useColorScheme } from "react-native";
+import { colors } from "@/styles/commonStyles";
 
 export default function Index() {
   const [isOnboarded, setIsOnboarded] = useState<boolean | null>(null);
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === 'dark' ? colors.dark : colors.light;
 
   useEffect(() => {
     async function checkOnboarding() {
@@ -22,8 +25,13 @@ export default function Index() {
 
   if (isOnboarded === null) {
     return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" />
+      <View style={{ 
+        flex: 1, 
+        justifyContent: "center", 
+        alignItems: "center",
+        backgroundColor: theme.background 
+      }}>
+        <ActivityIndicator size="large" color={theme.primary} />
       </View>
     );
   }

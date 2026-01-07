@@ -1,4 +1,5 @@
 
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,65 +11,69 @@ import {
   Alert,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
 import { IconSymbol } from '@/components/IconSymbol';
-import { requestNotificationPermissions, cancelAllHabitNotifications } from '@/utils/notifications';
-import { colors } from '@/styles/commonStyles';
-import React, { useState, useEffect } from 'react';
 import { useHabits } from '@/contexts/HabitContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { colors } from '@/styles/commonStyles';
+import * as Haptics from 'expo-haptics';
+import { requestNotificationPermissions, cancelAllHabitNotifications } from '@/utils/notifications';
 
 export default function SettingsScreen() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
-  const theme = isDark ? colors.dark : colors.light;
-  const { settings, updateSettings, resetAll } = useHabits();
+  const { settings, updateSettings, habits } = useHabits();
   const { user, signOut } = useAuth();
-  
-  const [notificationsEnabled, setNotificationsEnabled] = useState(settings.notificationsEnabled);
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === 'dark' ? colors.dark : colors.light;
+  const [localNotificationsEnabled, setLocalNotificationsEnabled] = useState(settings.notificationsEnabled);
 
   useEffect(() => {
-    setNotificationsEnabled(settings.notificationsEnabled);
+    setLocalNotificationsEnabled(settings.notificationsEnabled);
   }, [settings.notificationsEnabled]);
 
-  const handleToggleNotifications = async (value: boolean) => {
+  async function handleToggleNotifications(value: boolean) {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    
     if (value) {
       const granted = await requestNotificationPermissions();
-      if (!granted) {
-        Alert.alert('Permission Denied', 'Please enable notifications in Settings');
-        return;
+      if (granted) {
+        setLocalNotificationsEnabled(true);
+        await updateSettings({ notificationsEnabled: true });
+      } else {
+        Alert.alert(
+          'Permission Required',
+          'Please enable notifications in your device settings to receive habit reminders.',
+          [{ text: 'OK' }]
+        );
       }
     } else {
+      setLocalNotificationsEnabled(false);
+      await updateSettings({ notificationsEnabled: false });
       await cancelAllHabitNotifications();
     }
-    
-    setNotificationsEnabled(value);
-    await updateSettings({ notificationsEnabled: value });
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
+  }
 
-  const handleResetData = () => {
+  function handleResetData() {
     Alert.alert(
       'Reset All Data',
-      'This will delete all your habits and progress. This cannot be undone.',
+      'This will delete all your habits and progress. This action cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Reset',
           style: 'destructive',
           onPress: async () => {
-            await resetAll();
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+            await updateSettings({ hasCompletedOnboarding: false });
+            router.replace('/onboarding');
           },
         },
       ]
     );
-  };
+  }
 
-  const handleSignOut = async () => {
+  async function handleSignOut() {
     Alert.alert(
       'Sign Out',
       'Are you sure you want to sign out?',
@@ -79,92 +84,182 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             await signOut();
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            Alert.alert('Signed Out', 'You have been signed out successfully.');
           },
         },
       ]
     );
-  };
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <Animated.View entering={FadeIn} style={styles.header}>
-        <Text style={[styles.title, { color: theme.text }]}>Settings</Text>
-      </Animated.View>
-
-      <ScrollView
+      <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
+        {/* Header */}
+        <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
+          <Text style={[styles.title, { color: theme.text }]}>
+            Settings
+          </Text>
+        </Animated.View>
+
+        {/* User Info */}
         {user && (
-          <Animated.View entering={FadeInDown.delay(100)} style={[styles.section, { backgroundColor: theme.card }]}>
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Account</Text>
-            <View style={styles.accountInfo}>
-              <IconSymbol ios_icon_name="person.circle.fill" android_material_icon_name="account-circle" size={48} color={theme.accent} />
-              <View style={styles.accountText}>
-                <Text style={[styles.accountName, { color: theme.text }]}>{user.name || 'User'}</Text>
-                <Text style={[styles.accountEmail, { color: theme.textSecondary }]}>{user.email}</Text>
-              </View>
+          <Animated.View 
+            entering={FadeInDown.delay(200).duration(600)} 
+            style={[styles.userCard, { backgroundColor: theme.card }]}
+          >
+            <View style={[styles.userAvatar, { backgroundColor: theme.primary + '20' }]}>
+              <Text style={{ fontSize: 24 }}>👤</Text>
             </View>
-            <TouchableOpacity
-              style={[styles.button, { backgroundColor: theme.border }]}
-              onPress={handleSignOut}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.buttonText, { color: theme.text }]}>Sign Out</Text>
-            </TouchableOpacity>
+            <View style={styles.userInfo}>
+              <Text style={[styles.userName, { color: theme.text }]}>
+                {user.name || 'User'}
+              </Text>
+              <Text style={[styles.userEmail, { color: theme.textSecondary }]}>
+                {user.email}
+              </Text>
+            </View>
           </Animated.View>
         )}
 
-        <Animated.View entering={FadeInDown.delay(200)} style={[styles.section, { backgroundColor: theme.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Preferences</Text>
+        {/* Settings Sections */}
+        <Animated.View entering={FadeInDown.delay(300).duration(600)} style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+            PREFERENCES
+          </Text>
           
-          <View style={styles.settingRow}>
-            <View style={styles.settingLeft}>
-              <IconSymbol ios_icon_name="bell.fill" android_material_icon_name="notifications" size={20} color={theme.text} />
-              <Text style={[styles.settingLabel, { color: theme.text }]}>Notifications</Text>
+          <View style={[styles.settingCard, { backgroundColor: theme.card }]}>
+            <View style={styles.settingRow}>
+              <View style={styles.settingLeft}>
+                <IconSymbol
+                  ios_icon_name="bell.fill"
+                  android_material_icon_name="notifications"
+                  size={24}
+                  color={theme.text}
+                />
+                <View style={styles.settingText}>
+                  <Text style={[styles.settingTitle, { color: theme.text }]}>
+                    Notifications
+                  </Text>
+                  <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
+                    Receive habit reminders
+                  </Text>
+                </View>
+              </View>
+              <Switch
+                value={localNotificationsEnabled}
+                onValueChange={handleToggleNotifications}
+                trackColor={{ false: theme.border, true: theme.primary + '60' }}
+                thumbColor={localNotificationsEnabled ? theme.primary : '#f4f3f4'}
+              />
             </View>
-            <Switch
-              value={notificationsEnabled}
-              onValueChange={handleToggleNotifications}
-              trackColor={{ false: theme.border, true: theme.accent }}
-              thumbColor={notificationsEnabled ? '#fff' : '#f4f3f4'}
-              ios_backgroundColor={theme.border}
-            />
           </View>
-
-          <View style={[styles.divider, { backgroundColor: theme.border }]} />
-
-          <TouchableOpacity
-            style={styles.settingRow}
-            onPress={() => router.push('/manage-habits')}
-            activeOpacity={0.7}
-          >
-            <View style={styles.settingLeft}>
-              <IconSymbol ios_icon_name="list.bullet" android_material_icon_name="list" size={20} color={theme.text} />
-              <Text style={[styles.settingLabel, { color: theme.text }]}>Manage Habits</Text>
-            </View>
-            <IconSymbol ios_icon_name="chevron.right" android_material_icon_name="chevron-right" size={16} color={theme.textSecondary} />
-          </TouchableOpacity>
         </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(300)} style={[styles.section, { backgroundColor: theme.card }]}>
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Data</Text>
+        {/* Account Section */}
+        <Animated.View entering={FadeInDown.delay(400).duration(600)} style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+            ACCOUNT
+          </Text>
           
-          <TouchableOpacity
-            style={[styles.button, styles.dangerButton]}
-            onPress={handleResetData}
-            activeOpacity={0.7}
-          >
-            <IconSymbol ios_icon_name="trash.fill" android_material_icon_name="delete" size={18} color="#fff" />
-            <Text style={styles.dangerButtonText}>Reset All Data</Text>
-          </TouchableOpacity>
+          <View style={[styles.settingCard, { backgroundColor: theme.card }]}>
+            {!user ? (
+              <TouchableOpacity
+                onPress={() => router.push('/auth')}
+                style={styles.settingRow}
+              >
+                <View style={styles.settingLeft}>
+                  <IconSymbol
+                    ios_icon_name="person.circle"
+                    android_material_icon_name="account-circle"
+                    size={24}
+                    color={theme.text}
+                  />
+                  <View style={styles.settingText}>
+                    <Text style={[styles.settingTitle, { color: theme.text }]}>
+                      Sign In
+                    </Text>
+                    <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
+                      Sync across devices
+                    </Text>
+                  </View>
+                </View>
+                <IconSymbol
+                  ios_icon_name="chevron.right"
+                  android_material_icon_name="chevron-right"
+                  size={24}
+                  color={theme.textSecondary}
+                />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                onPress={handleSignOut}
+                style={styles.settingRow}
+              >
+                <View style={styles.settingLeft}>
+                  <IconSymbol
+                    ios_icon_name="arrow.right.square"
+                    android_material_icon_name="logout"
+                    size={24}
+                    color={theme.error}
+                  />
+                  <View style={styles.settingText}>
+                    <Text style={[styles.settingTitle, { color: theme.error }]}>
+                      Sign Out
+                    </Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            )}
+          </View>
         </Animated.View>
 
-        <View style={styles.footer}>
-          <Text style={[styles.footerText, { color: theme.textSecondary }]}>Momentum v1.0.0</Text>
-        </View>
+        {/* Data Section */}
+        <Animated.View entering={FadeInDown.delay(500).duration(600)} style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: theme.textSecondary }]}>
+            DATA
+          </Text>
+          
+          <View style={[styles.settingCard, { backgroundColor: theme.card }]}>
+            <TouchableOpacity
+              onPress={handleResetData}
+              style={styles.settingRow}
+            >
+              <View style={styles.settingLeft}>
+                <IconSymbol
+                  ios_icon_name="trash"
+                  android_material_icon_name="delete"
+                  size={24}
+                  color={theme.error}
+                />
+                <View style={styles.settingText}>
+                  <Text style={[styles.settingTitle, { color: theme.error }]}>
+                    Reset All Data
+                  </Text>
+                  <Text style={[styles.settingDescription, { color: theme.textSecondary }]}>
+                    Delete all habits and progress
+                  </Text>
+                </View>
+              </View>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+
+        {/* App Info */}
+        <Animated.View entering={FadeInDown.delay(600).duration(600)} style={styles.appInfo}>
+          <Text style={[styles.appInfoText, { color: theme.textSecondary }]}>
+            Momentum v1.0.0
+          </Text>
+          <Text style={[styles.appInfoText, { color: theme.textSecondary }]}>
+            Build better habits, one day at a time
+          </Text>
+        </Animated.View>
+
+        {/* Bottom Padding for Tab Bar */}
+        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -174,110 +269,89 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 120,
+    paddingHorizontal: 20,
   },
-  section: {
-    borderRadius: 16,
-    padding: 20,
-    marginBottom: 16,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+  header: {
+    marginTop: Platform.OS === 'android' ? 20 : 10,
+    marginBottom: 24,
   },
-  sectionTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 16,
-    opacity: 0.6,
+  title: {
+    fontSize: 32,
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
-  accountInfo: {
+  userCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
-    gap: 12,
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 24,
   },
-  accountText: {
+  userAvatar: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  userInfo: {
     flex: 1,
   },
-  accountName: {
+  userName: {
     fontSize: 18,
     fontWeight: '600',
-    marginBottom: 2,
+    marginBottom: 4,
   },
-  accountEmail: {
+  userEmail: {
     fontSize: 14,
+  },
+  section: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 1,
+    marginBottom: 12,
+  },
+  settingCard: {
+    borderRadius: 16,
+    overflow: 'hidden',
   },
   settingRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 12,
+    alignItems: 'center',
+    padding: 16,
   },
   settingLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     flex: 1,
   },
-  settingLabel: {
-    fontSize: 16,
-    fontWeight: '500',
+  settingText: {
+    marginLeft: 16,
+    flex: 1,
   },
-  divider: {
-    height: 1,
-    marginVertical: 8,
-  },
-  button: {
-    paddingVertical: 14,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  buttonText: {
+  settingTitle: {
     fontSize: 16,
     fontWeight: '600',
+    marginBottom: 2,
   },
-  dangerButton: {
-    backgroundColor: '#FF3B30',
-    flexDirection: 'row',
-    gap: 8,
+  settingDescription: {
+    fontSize: 14,
   },
-  dangerButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  footer: {
+  appInfo: {
     alignItems: 'center',
     paddingVertical: 24,
   },
-  footerText: {
-    fontSize: 13,
+  appInfoText: {
+    fontSize: 12,
+    marginBottom: 4,
   },
 });

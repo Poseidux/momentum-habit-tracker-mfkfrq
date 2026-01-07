@@ -1,40 +1,34 @@
-// This file is a fallback for using MaterialIcons on Android and web.
 
-import React from "react";
-import { SymbolWeight } from "expo-symbols";
-import {
-  OpaqueColorValue,
-  StyleProp,
-  TextStyle,
-  ViewStyle,
-} from "react-native";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+import React from 'react';
+import { Platform } from 'react-native';
+import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 
-/**
- * An icon component that uses native SFSymbols on iOS, and MaterialIcons on Android and web. This ensures a consistent look across platforms, and optimal resource usage.
- *
- * Icon `name`s are based on SFSymbols and require manual mapping to MaterialIcons.
- */
+interface IconSymbolProps {
+  ios_icon_name: string;
+  android_material_icon_name: keyof typeof MaterialIcons.glyphMap;
+  size?: number;
+  color: string;
+  style?: any;
+}
+
 export function IconSymbol({
-  ios_icon_name = undefined,
+  ios_icon_name,
   android_material_icon_name,
   size = 24,
   color,
   style,
-}: {
-  ios_icon_name?: string | undefined;
-  android_material_icon_name: keyof typeof MaterialIcons.glyphMap;
-  size?: number;
-  color: string | OpaqueColorValue;
-  style?: StyleProp<ViewStyle>;
-  weight?: SymbolWeight;
-}) {
-  return (
-    <MaterialIcons
-      color={color}
-      size={size}
-      name={android_material_icon_name}
-      style={style as StyleProp<TextStyle>}
-    />
-  );
+}: IconSymbolProps) {
+  if (Platform.OS === 'android' || Platform.OS === 'web') {
+    return (
+      <MaterialIcons
+        name={android_material_icon_name}
+        size={size}
+        color={color}
+        style={style}
+      />
+    );
+  }
+  
+  // iOS will use the .ios.tsx version
+  return null;
 }

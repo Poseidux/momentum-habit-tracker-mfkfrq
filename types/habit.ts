@@ -5,15 +5,16 @@ export interface Habit {
   color: string;
   icon: string;
   schedule: 'daily' | 'specific';
-  scheduledDays?: number[]; // Array of day numbers (0=Sun, 6=Sat) for specific schedule
+  scheduledDays?: number[]; // 0-6 for Sun-Sat
   reminderTime?: string; // HH:MM format
-  completions: string[]; // Array of date strings (YYYY-MM-DD)
+  completions: { [date: string]: boolean }; // date in YYYY-MM-DD format
   createdAt: string;
-  customIconUri?: string; // For premium users
+  customIconUri?: string;
 }
 
 export interface UserSettings {
   notificationsEnabled: boolean;
-  darkMode: boolean;
+  darkMode: 'auto' | 'light' | 'dark';
+  userName?: string;
   hasCompletedOnboarding: boolean;
 }

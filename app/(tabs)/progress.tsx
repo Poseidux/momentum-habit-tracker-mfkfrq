@@ -1,12 +1,5 @@
 
-import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  getTodayString,
-  getWeeklyStats,
-  getCompletionPercentage,
-  calculateStreak,
-} from '@/utils/habitUtils';
+import React from 'react';
 import {
   View,
   Text,
@@ -15,208 +8,209 @@ import {
   useColorScheme,
   Platform,
 } from 'react-native';
-import { colors } from '@/styles/commonStyles';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useHabits } from '@/contexts/HabitContext';
-import React from 'react';
+import { colors } from '@/styles/commonStyles';
+import {
+  getTodayString,
+  getWeeklyStats,
+  getCompletionPercentage,
+  calculateStreak,
+} from '@/utils/habitUtils';
 
 export default function ProgressScreen() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
-  const theme = isDark ? colors.dark : colors.light;
   const { habits } = useHabits();
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === 'dark' ? colors.dark : colors.light;
 
-  const today = getTodayString();
   const weeklyStats = getWeeklyStats(habits);
+  const weeklyPercentage = weeklyStats.total > 0 
+    ? Math.round((weeklyStats.completed / weeklyStats.total) * 100) 
+    : 0;
 
-  const generateCalendarDays = () => {
+  function generateCalendarDays() {
     const days = [];
-    const currentDate = new Date();
+    const today = new Date();
     
-    // Show last 42 days (6 weeks)
-    for (let i = 41; i >= 0; i--) {
-      const date = new Date(currentDate);
+    for (let i = 29; i >= 0; i--) {
+      const date = new Date(today);
       date.setDate(date.getDate() - i);
-      const dateString = date.toISOString().split('T')[0];
-      
-      const percentage = getCompletionPercentage(habits, dateString);
-      
-      days.push({
-        date: dateString,
-        day: date.getDate(),
-        percentage,
-      });
+      days.push(date);
     }
     
     return days;
-  };
+  }
+
+  function getIntensityColor(percentage: number): string {
+    if (percentage === 0) return theme.border;
+    if (percentage < 25) return theme.primary + '40';
+    if (percentage < 50) return theme.primary + '60';
+    if (percentage < 75) return theme.primary + '80';
+    return theme.primary;
+  }
 
   const calendarDays = generateCalendarDays();
 
-  const getIntensityColor = (percentage: number) => {
-    if (percentage === 0) return theme.border;
-    if (percentage < 33) return theme.primary + '40';
-    if (percentage < 66) return theme.primary + '70';
-    if (percentage < 100) return theme.primary + 'B0';
-    return theme.primary;
-  };
-
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <ScrollView
+      <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View entering={FadeIn} style={styles.header}>
-          <Text style={[styles.title, { color: theme.text }]}>Progress</Text>
+        {/* Header */}
+        <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
+          <Text style={[styles.title, { color: theme.text }]}>
+            Progress
+          </Text>
         </Animated.View>
 
-        {/* This Week Summary */}
-        <Animated.View
-          entering={FadeIn.delay(100)}
-          style={[
-            styles.summaryCard,
-            {
-              backgroundColor: theme.card,
-              borderColor: theme.border,
-            },
-          ]}
+        {/* Weekly Summary */}
+        <Animated.View 
+          entering={FadeInDown.delay(200).duration(600)} 
+          style={[styles.summaryCard, { backgroundColor: theme.card }]}
         >
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>This Week</Text>
-          
-          <View style={styles.statsGrid}>
+          <Text style={[styles.summaryTitle, { color: theme.text }]}>
+            This Week
+          </Text>
+          <View style={styles.summaryStats}>
             <View style={styles.statItem}>
               <Text style={[styles.statValue, { color: theme.primary }]}>
-                {weeklyStats.completedThisWeek}
+                {weeklyPercentage}%
+              </Text>
+              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
+                Completion Rate
+              </Text>
+            </View>
+            <View style={styles.statDivider} />
+            <View style={styles.statItem}>
+              <Text style={[styles.statValue, { color: theme.success }]}>
+                {weeklyStats.completed}
               </Text>
               <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
                 Completed
-              </Text>
-            </View>
-            
-            <View style={styles.statDivider} />
-            
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.primary }]}>
-                {weeklyStats.bestDay || 'None'}
-              </Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-                Best Day
-              </Text>
-            </View>
-            
-            <View style={styles.statDivider} />
-            
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: theme.primary }]}>
-                {Math.round(weeklyStats.weeklyCompletionRate)}%
-              </Text>
-              <Text style={[styles.statLabel, { color: theme.textSecondary }]}>
-                Success Rate
               </Text>
             </View>
           </View>
         </Animated.View>
 
         {/* Calendar Heatmap */}
-        <Animated.View
-          entering={FadeIn.delay(200)}
-          style={[
-            styles.calendarCard,
-            {
-              backgroundColor: theme.card,
-              borderColor: theme.border,
-            },
-          ]}
+        <Animated.View 
+          entering={FadeInDown.delay(400).duration(600)} 
+          style={styles.calendarSection}
         >
-          <Text style={[styles.sectionTitle, { color: theme.text }]}>Activity</Text>
-          <Text style={[styles.sectionSubtitle, { color: theme.textSecondary }]}>
-            Last 6 weeks
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>
+            Last 30 Days
           </Text>
-
           <View style={styles.calendar}>
-            {calendarDays.map((day, index) => (
-              <View
-                key={day.date}
-                style={[
-                  styles.calendarDay,
-                  {
-                    backgroundColor: getIntensityColor(day.percentage),
-                  },
-                ]}
-              />
-            ))}
-          </View>
+            {calendarDays.map((date, index) => {
+              const dateStr = date.toISOString().split('T')[0];
+              let dayTotal = 0;
+              let dayCompleted = 0;
 
-          <View style={styles.legend}>
-            <Text style={[styles.legendText, { color: theme.textSecondary }]}>Less</Text>
-            <View style={styles.legendColors}>
-              <View style={[styles.legendBox, { backgroundColor: theme.border }]} />
-              <View style={[styles.legendBox, { backgroundColor: theme.primary + '40' }]} />
-              <View style={[styles.legendBox, { backgroundColor: theme.primary + '70' }]} />
-              <View style={[styles.legendBox, { backgroundColor: theme.primary + 'B0' }]} />
-              <View style={[styles.legendBox, { backgroundColor: theme.primary }]} />
+              habits.forEach(habit => {
+                if (habit.completions[dateStr]) {
+                  dayCompleted++;
+                  dayTotal++;
+                } else {
+                  dayTotal++;
+                }
+              });
+
+              const percentage = dayTotal > 0 ? (dayCompleted / dayTotal) * 100 : 0;
+              const intensity = getIntensityColor(percentage);
+
+              return (
+                <View
+                  key={index}
+                  style={[
+                    styles.calendarDay,
+                    { backgroundColor: intensity },
+                  ]}
+                />
+              );
+            })}
+          </View>
+          <View style={styles.calendarLegend}>
+            <Text style={[styles.legendText, { color: theme.textSecondary }]}>
+              Less
+            </Text>
+            <View style={styles.legendDots}>
+              <View style={[styles.legendDot, { backgroundColor: theme.border }]} />
+              <View style={[styles.legendDot, { backgroundColor: theme.primary + '40' }]} />
+              <View style={[styles.legendDot, { backgroundColor: theme.primary + '60' }]} />
+              <View style={[styles.legendDot, { backgroundColor: theme.primary + '80' }]} />
+              <View style={[styles.legendDot, { backgroundColor: theme.primary }]} />
             </View>
-            <Text style={[styles.legendText, { color: theme.textSecondary }]}>More</Text>
+            <Text style={[styles.legendText, { color: theme.textSecondary }]}>
+              More
+            </Text>
           </View>
         </Animated.View>
 
-        {/* Habit Streaks */}
-        {habits.length > 0 && (
-          <Animated.View
-            entering={FadeIn.delay(300)}
-            style={[
-              styles.streaksCard,
-              {
-                backgroundColor: theme.card,
-                borderColor: theme.border,
-              },
-            ]}
-          >
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Current Streaks</Text>
+        {/* Habit Stats */}
+        <Animated.View 
+          entering={FadeInDown.delay(600).duration(600)} 
+          style={styles.habitsSection}
+        >
+          <Text style={[styles.sectionTitle, { color: theme.text }]}>
+            Habit Stats
+          </Text>
+          {habits.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                No habits yet. Add your first habit to see progress!
+              </Text>
+            </View>
+          ) : (
+            habits.map((habit, index) => {
+              const streak = calculateStreak(habit);
+              const completion30 = getCompletionPercentage(habit, 30);
 
-            <View style={styles.streaksList}>
-              {habits
-                .map((habit) => ({
-                  ...habit,
-                  streak: calculateStreak(habit),
-                }))
-                .sort((a, b) => b.streak - a.streak)
-                .map((habit, index) => (
-                  <Animated.View
-                    key={habit.id}
-                    entering={FadeInDown.delay(300 + index * 50).duration(400)}
-                    style={styles.streakItem}
-                  >
-                    <View style={styles.streakLeft}>
-                      <View style={[styles.streakIcon, { backgroundColor: habit.color + '15' }]}>
-                        <Text style={styles.streakEmoji}>{habit.icon}</Text>
-                      </View>
-                      <Text style={[styles.streakName, { color: theme.text }]}>
+              return (
+                <View
+                  key={habit.id}
+                  style={[styles.habitStatCard, { backgroundColor: theme.card }]}
+                >
+                  <View style={styles.habitStatHeader}>
+                    <View style={[styles.habitStatIcon, { backgroundColor: habit.color + '20' }]}>
+                      <Text style={{ fontSize: 20 }}>{habit.icon}</Text>
+                    </View>
+                    <View style={styles.habitStatInfo}>
+                      <Text style={[styles.habitStatName, { color: theme.text }]}>
                         {habit.name}
                       </Text>
+                      <Text style={[styles.habitStatSchedule, { color: theme.textSecondary }]}>
+                        {habit.schedule === 'daily' ? 'Daily' : 'Custom Schedule'}
+                      </Text>
                     </View>
-                    <View style={styles.streakRight}>
-                      {habit.streak > 0 ? (
-                        <>
-                          <Text style={styles.streakFire}>🔥</Text>
-                          <Text style={[styles.streakNumber, { color: theme.primary }]}>
-                            {habit.streak}
-                          </Text>
-                        </>
-                      ) : (
-                        <Text style={[styles.streakZero, { color: theme.textTertiary }]}>
-                          No streak
-                        </Text>
-                      )}
+                  </View>
+                  <View style={styles.habitStatMetrics}>
+                    <View style={styles.metricItem}>
+                      <Text style={[styles.metricValue, { color: theme.primary }]}>
+                        {streak}
+                      </Text>
+                      <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
+                        Day Streak
+                      </Text>
                     </View>
-                  </Animated.View>
-                ))}
-            </View>
-          </Animated.View>
-        )}
+                    <View style={styles.metricItem}>
+                      <Text style={[styles.metricValue, { color: theme.success }]}>
+                        {completion30}%
+                      </Text>
+                      <Text style={[styles.metricLabel, { color: theme.textSecondary }]}>
+                        30-Day Rate
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              );
+            })
+          )}
+        </Animated.View>
 
-        {/* Extra padding for tab bar */}
+        {/* Bottom Padding for Tab Bar */}
         <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
@@ -231,155 +225,107 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: 20,
+    paddingHorizontal: 20,
   },
   header: {
+    marginTop: Platform.OS === 'android' ? 20 : 10,
     marginBottom: 24,
   },
   title: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '700',
     letterSpacing: -0.5,
   },
   summaryCard: {
     padding: 24,
-    borderRadius: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 3,
-      },
-      web: {
-        boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
-      },
-    }),
+    borderRadius: 16,
+    marginBottom: 24,
   },
-  sectionTitle: {
-    fontSize: 20,
+  summaryTitle: {
+    fontSize: 18,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 16,
   },
-  sectionSubtitle: {
-    fontSize: 14,
-    marginBottom: 20,
-  },
-  statsGrid: {
+  summaryStats: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 20,
+    justifyContent: 'space-around',
   },
   statItem: {
-    flex: 1,
     alignItems: 'center',
+    flex: 1,
   },
   statValue: {
-    fontSize: 28,
+    fontSize: 36,
     fontWeight: '700',
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 13,
-    textAlign: 'center',
+    fontSize: 14,
   },
   statDivider: {
     width: 1,
-    height: 40,
     backgroundColor: '#E5E7EB',
-    marginHorizontal: 8,
+    marginHorizontal: 16,
   },
-  calendarCard: {
-    padding: 24,
-    borderRadius: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 3,
-      },
-      web: {
-        boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
-      },
-    }),
+  calendarSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 16,
   },
   calendar: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
-    marginBottom: 16,
   },
   calendarDay: {
-    width: 12,
-    height: 12,
-    borderRadius: 3,
+    width: 24,
+    height: 24,
+    borderRadius: 4,
   },
-  legend: {
+  calendarLegend: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    marginTop: 16,
     gap: 8,
   },
   legendText: {
     fontSize: 12,
   },
-  legendColors: {
+  legendDots: {
     flexDirection: 'row',
     gap: 4,
   },
-  legendBox: {
-    width: 12,
-    height: 12,
-    borderRadius: 3,
+  legendDot: {
+    width: 16,
+    height: 16,
+    borderRadius: 4,
   },
-  streaksCard: {
-    padding: 24,
-    borderRadius: 20,
-    marginBottom: 20,
-    borderWidth: 1,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.08,
-        shadowRadius: 12,
-      },
-      android: {
-        elevation: 3,
-      },
-      web: {
-        boxShadow: '0 2px 12px rgba(0, 0, 0, 0.08)',
-      },
-    }),
+  habitsSection: {
+    marginBottom: 24,
   },
-  streaksList: {
-    marginTop: 16,
-    gap: 12,
-  },
-  streakItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+  emptyState: {
+    paddingVertical: 40,
     alignItems: 'center',
-    paddingVertical: 8,
   },
-  streakLeft: {
+  emptyText: {
+    fontSize: 16,
+    textAlign: 'center',
+  },
+  habitStatCard: {
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
+  },
+  habitStatHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    marginBottom: 16,
   },
-  streakIcon: {
+  habitStatIcon: {
     width: 40,
     height: 40,
     borderRadius: 20,
@@ -387,27 +333,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 12,
   },
-  streakEmoji: {
-    fontSize: 20,
-  },
-  streakName: {
-    fontSize: 16,
-    fontWeight: '500',
+  habitStatInfo: {
     flex: 1,
   },
-  streakRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
+  habitStatName: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 2,
   },
-  streakFire: {
-    fontSize: 18,
-  },
-  streakNumber: {
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  streakZero: {
+  habitStatSchedule: {
     fontSize: 14,
+  },
+  habitStatMetrics: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  metricItem: {
+    alignItems: 'center',
+  },
+  metricValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    marginBottom: 4,
+  },
+  metricLabel: {
+    fontSize: 12,
   },
 });

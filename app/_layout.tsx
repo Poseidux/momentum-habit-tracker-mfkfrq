@@ -2,7 +2,7 @@
 import "react-native-reanimated";
 import React, { useEffect, useState } from "react";
 import { useFonts } from "expo-font";
-import { Stack, router } from "expo-router";
+import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useColorScheme } from "react-native";
@@ -11,6 +11,7 @@ import { HabitProvider } from "@/contexts/HabitContext";
 import { PremiumProvider } from "@/contexts/PremiumContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 SplashScreen.preventAutoHideAsync();
 
@@ -45,8 +46,8 @@ export default function RootLayout() {
   }
 
   return (
-    <>
-      <StatusBar style="auto" />
+    <ErrorBoundary>
+      <StatusBar style={colorScheme === 'dark' ? 'light' : 'dark'} />
       <AuthProvider>
         <PremiumProvider>
           <HabitProvider>
@@ -58,11 +59,13 @@ export default function RootLayout() {
                 <Stack.Screen name="edit-habit" options={{ presentation: "modal" }} />
                 <Stack.Screen name="manage-habits" options={{ presentation: "modal" }} />
                 <Stack.Screen name="auth" options={{ presentation: "modal" }} />
+                <Stack.Screen name="auth-callback" options={{ presentation: "modal" }} />
+                <Stack.Screen name="auth-popup" options={{ presentation: "modal" }} />
               </Stack>
             </GestureHandlerRootView>
           </HabitProvider>
         </PremiumProvider>
       </AuthProvider>
-    </>
+    </ErrorBoundary>
   );
 }

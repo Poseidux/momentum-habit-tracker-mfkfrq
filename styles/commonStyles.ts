@@ -1,55 +1,53 @@
 
-import { StyleSheet } from 'react-native';
-
 export const colors = {
   light: {
     background: '#FFFFFF',
     surface: '#F8F9FA',
     card: '#FFFFFF',
-    cardBorder: '#E5E7EB',
     text: '#1A1A1A',
     textSecondary: '#6B7280',
     border: '#E5E7EB',
-    accent: '#3B82F6',
-    primary: '#3B82F6',
+    primary: '#6366F1',
     success: '#10B981',
     error: '#EF4444',
-    highlight: '#F3F4F6',
+    shadow: 'rgba(0, 0, 0, 0.05)',
   },
   dark: {
     background: '#0A0A0A',
     surface: '#1A1A1A',
     card: '#1F1F1F',
-    cardBorder: '#2D2D2D',
     text: '#FFFFFF',
     textSecondary: '#9CA3AF',
     border: '#2D2D2D',
-    accent: '#60A5FA',
-    primary: '#60A5FA',
+    primary: '#818CF8',
     success: '#34D399',
     error: '#F87171',
-    highlight: '#2D2D2D',
+    shadow: 'rgba(0, 0, 0, 0.3)',
   },
 };
 
 export const habitColors = [
-  '#3B82F6', // Blue
-  '#10B981', // Green
-  '#F59E0B', // Amber
-  '#EF4444', // Red
+  '#6366F1', // Indigo
   '#8B5CF6', // Purple
   '#EC4899', // Pink
-  '#14B8A6', // Teal
-  '#F97316', // Orange
+  '#EF4444', // Red
+  '#F59E0B', // Amber
+  '#10B981', // Green
+  '#06B6D4', // Cyan
+  '#3B82F6', // Blue
 ];
 
 export const habitIcons = [
-  '📚', // Book
-  '💪', // Exercise
-  '💧', // Water
-  '😴', // Sleep
-  '🍎', // Food
-  '🧘', // Meditation
-  '❤️', // Heart
-  '🌱', // Growth
+  'checkmark.circle',
+  'star',
+  'heart',
+  'flame',
+  'bolt',
+  'leaf',
+  'drop',
+  'moon',
+  'sun.max',
+  'book',
+  'dumbbell',
+  'fork.knife',
 ];

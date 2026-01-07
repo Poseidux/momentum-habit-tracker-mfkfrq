@@ -1,4 +1,5 @@
 
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,85 +10,92 @@ import {
   Platform,
   Image,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import Animated, { FadeIn, FadeInDown, withSpring, useAnimatedStyle, useSharedValue } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import * as Haptics from 'expo-haptics';
 import { IconSymbol } from '@/components/IconSymbol';
+import { useHabits } from '@/contexts/HabitContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { colors } from '@/styles/commonStyles';
+import * as Haptics from 'expo-haptics';
 import {
   getTodayString,
   isHabitScheduledForDate,
-  toggleHabitCompletion,
   calculateStreak,
 } from '@/utils/habitUtils';
-import { useHabits } from '@/contexts/HabitContext';
-import React, { useState, useEffect } from 'react';
 import { authenticatedGet, authenticatedPost } from '@/utils/api';
 
-function FuturisticCompletionRing({ progress, size = 200 }: { progress: number; size?: number }) {
-  const scale = useSharedValue(0);
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
-  const theme = isDark ? colors.dark : colors.light;
+const AnimatedTouchable = Animated.createAnimatedComponent(TouchableOpacity);
 
+function FuturisticCompletionRing({ progress, size = 120 }: { progress: number; size?: number }) {
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === 'dark' ? colors.dark : colors.light;
+  
+  const rotation = useSharedValue(0);
+  
   useEffect(() => {
-    scale.value = withSpring(1, { damping: 15, stiffness: 100 });
+    rotation.value = withSpring(progress * 360, {
+      damping: 15,
+      stiffness: 100,
+    });
   }, [progress]);
 
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  const radius = (size - 16) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (progress / 100) * circumference;
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ rotate: `${rotation.value}deg` }],
+    };
+  });
 
   return (
-    <Animated.View style={[styles.completionRingContainer, animatedStyle, { width: size, height: size }]}>
-      <View style={styles.ringWrapper}>
-        {/* Background ring */}
-        <View 
-          style={[
-            styles.ringBackground, 
-            { 
-              width: size, 
-              height: size, 
-              borderRadius: size / 2, 
-              borderColor: theme.border,
-              borderWidth: 8,
-            }
-          ]} 
-        />
-        
-        {/* Center content */}
-        <View style={styles.ringCenter}>
-          <Text style={[styles.progressPercentage, { color: theme.text }]}>{Math.round(progress)}%</Text>
-          <Text style={[styles.progressLabel, { color: theme.textSecondary }]}>Complete</Text>
-        </View>
-
-        {/* Glow effect for 100% */}
-        {progress === 100 && (
-          <View style={[styles.glowEffect, { backgroundColor: theme.accent, width: size, height: size, borderRadius: size / 2 }]} />
-        )}
+    <View style={[styles.ringContainer, { width: size, height: size }]}>
+      <View style={[styles.ringOuter, { 
+        borderColor: theme.border,
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+      }]}>
+        <Animated.View style={[
+          styles.ringProgress,
+          {
+            borderColor: theme.primary,
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+          },
+          animatedStyle,
+        ]} />
       </View>
-    </Animated.View>
+      <View style={styles.ringCenter}>
+        <Text style={[styles.ringPercentage, { color: theme.text }]}>
+          {Math.round(progress * 100)}%
+        </Text>
+        <Text style={[styles.ringLabel, { color: theme.textSecondary }]}>
+          Complete
+        </Text>
+      </View>
+    </View>
   );
 }
 
 export default function TodayScreen() {
-  const scheme = useColorScheme();
-  const isDark = scheme === 'dark';
-  const theme = isDark ? colors.dark : colors.light;
-  const { habits, updateHabit } = useHabits();
+  const { habits, toggleCompletion } = useHabits();
   const { user } = useAuth();
-  const [userGroups, setUserGroups] = useState<string[]>([]);
+  const colorScheme = useColorScheme();
+  const theme = colorScheme === 'dark' ? colors.dark : colors.light;
+  const [userGroups, setUserGroups] = useState<any[]>([]);
 
   const today = getTodayString();
-  const todayHabits = habits.filter((h) => isHabitScheduledForDate(h, today));
-  const completedCount = todayHabits.filter((h) => h.completions.includes(today)).length;
-  const progress = todayHabits.length > 0 ? (completedCount / todayHabits.length) * 100 : 0;
+  const todayDate = new Date();
+
+  const todayHabits = habits.filter(habit => 
+    isHabitScheduledForDate(habit, todayDate)
+  );
+
+  const completedCount = todayHabits.filter(habit => 
+    habit.completions[today]
+  ).length;
+
+  const progress = todayHabits.length > 0 ? completedCount / todayHabits.length : 0;
 
   useEffect(() => {
     if (user) {
@@ -95,174 +103,196 @@ export default function TodayScreen() {
     }
   }, [user]);
 
-  const fetchUserGroups = async () => {
+  async function fetchUserGroups() {
     try {
       const groups = await authenticatedGet('/api/groups');
-      setUserGroups(groups.map((g: any) => g.id));
+      setUserGroups(groups || []);
     } catch (error) {
-      console.error('Failed to fetch groups:', error);
+      console.error('Error fetching user groups:', error);
     }
-  };
+  }
 
-  const syncCompletionToGroups = async (habitName: string, completed: boolean) => {
+  async function syncCompletionToGroups(habitName: string, completed: boolean) {
     if (!user || userGroups.length === 0) return;
 
+    // TODO: Backend Integration - Sync habit completion to all user groups
     try {
-      for (const groupId of userGroups) {
-        await authenticatedPost(`/api/groups/${groupId}/completions`, {
+      for (const group of userGroups) {
+        await authenticatedPost(`/api/groups/${group.id}/completions`, {
           habitName,
           completed,
           date: today,
         });
       }
     } catch (error) {
-      console.error('Failed to sync completion:', error);
+      console.error('Error syncing completion to groups:', error);
     }
-  };
+  }
 
-  const handleToggleCompletion = async (habitId: string) => {
-    const habit = habits.find((h) => h.id === habitId);
+  async function handleToggleCompletion(habitId: string) {
+    const habit = habits.find(h => h.id === habitId);
     if (!habit) return;
 
-    const wasCompleted = habit.completions.includes(today);
-    const updatedHabit = toggleHabitCompletion(habit, today);
-    updateHabit(updatedHabit);
+    const wasCompleted = habit.completions[today];
+    
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    await toggleCompletion(habitId, today);
 
-    await syncCompletionToGroups(habit.name, !wasCompleted);
+    // Sync to groups if user is authenticated
+    if (user) {
+      await syncCompletionToGroups(habit.name, !wasCompleted);
+    }
+  }
 
-    Haptics.impactAsync(
-      wasCompleted ? Haptics.ImpactFeedbackStyle.Light : Haptics.ImpactFeedbackStyle.Medium
-    );
-  };
-
-  const handleEditHabit = (habitId: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    router.push(`/edit-habit?id=${habitId}`);
-  };
-
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      month: 'long',
-      day: 'numeric',
+  function handleEditHabit(habitId: string) {
+    router.push({
+      pathname: '/edit-habit',
+      params: { habitId },
     });
-  };
+  }
+
+  function formatDate(date: Date): string {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    
+    return `${days[date.getDay()]}, ${months[date.getMonth()]} ${date.getDate()}`;
+  }
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: theme.background }]} edges={['top']}>
-      <Animated.View entering={FadeIn} style={styles.header}>
-        <Text style={[styles.date, { color: theme.textSecondary }]}>{formatDate(new Date())}</Text>
-        <Text style={[styles.title, { color: theme.text }]}>Today</Text>
-      </Animated.View>
-
-      <ScrollView
+      <ScrollView 
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {todayHabits.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(100)} style={styles.progressSection}>
-            <FuturisticCompletionRing progress={progress} size={200} />
-            <Text style={[styles.summaryText, { color: theme.textSecondary }]}>
-              {completedCount} of {todayHabits.length} completed
+        {/* Header */}
+        <Animated.View entering={FadeIn.duration(600)} style={styles.header}>
+          <View>
+            <Text style={[styles.greeting, { color: theme.textSecondary }]}>
+              {formatDate(todayDate)}
             </Text>
-          </Animated.View>
-        )}
+            <Text style={[styles.title, { color: theme.text }]}>
+              Today&apos;s Habits
+            </Text>
+          </View>
+          <TouchableOpacity
+            onPress={() => router.push('/manage-habits')}
+            style={[styles.manageButton, { backgroundColor: theme.surface }]}
+          >
+            <IconSymbol
+              ios_icon_name="slider.horizontal.3"
+              android_material_icon_name="tune"
+              size={24}
+              color={theme.text}
+            />
+          </TouchableOpacity>
+        </Animated.View>
 
+        {/* Progress Ring */}
+        <Animated.View entering={FadeInDown.delay(200).duration(600)} style={styles.progressSection}>
+          <FuturisticCompletionRing progress={progress} />
+          <Text style={[styles.progressText, { color: theme.textSecondary }]}>
+            {completedCount} of {todayHabits.length} completed
+          </Text>
+        </Animated.View>
+
+        {/* Habits List */}
         <View style={styles.habitsSection}>
-          {todayHabits.map((habit, index) => {
-            const isCompleted = habit.completions.includes(today);
-            const streak = calculateStreak(habit);
-
-            return (
-              <Animated.View
-                key={habit.id}
-                entering={FadeInDown.delay(200 + index * 100)}
-                style={[
-                  styles.habitCard,
-                  { backgroundColor: theme.card },
-                  isCompleted && { opacity: 0.7 },
-                ]}
+          {todayHabits.length === 0 ? (
+            <Animated.View entering={FadeInDown.delay(400).duration(600)} style={styles.emptyState}>
+              <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
+                No habits scheduled for today
+              </Text>
+              <TouchableOpacity
+                onPress={() => router.push('/add-habit')}
+                style={[styles.addButton, { backgroundColor: theme.primary }]}
               >
-                <TouchableOpacity
-                  style={styles.habitContent}
-                  onPress={() => handleEditHabit(habit.id)}
+                <Text style={styles.addButtonText}>Add Your First Habit</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          ) : (
+            todayHabits.map((habit, index) => {
+              const isCompleted = habit.completions[today];
+              const streak = calculateStreak(habit);
+
+              return (
+                <AnimatedTouchable
+                  key={habit.id}
+                  entering={FadeInDown.delay(400 + index * 100).duration(600)}
+                  onPress={() => handleToggleCompletion(habit.id)}
                   onLongPress={() => handleEditHabit(habit.id)}
-                  activeOpacity={0.7}
+                  style={[
+                    styles.habitCard,
+                    {
+                      backgroundColor: theme.card,
+                      borderColor: isCompleted ? habit.color : theme.border,
+                      borderWidth: isCompleted ? 2 : 1,
+                    },
+                  ]}
                 >
                   <View style={styles.habitLeft}>
-                    <View style={[styles.habitIcon, { backgroundColor: habit.color + '20' }]}>
-                      {habit.customIconUri ? (
-                        <Image source={{ uri: habit.customIconUri }} style={styles.customIcon} />
-                      ) : (
-                        <Text style={styles.habitIconText}>{habit.icon}</Text>
-                      )}
-                    </View>
+                    {habit.customIconUri ? (
+                      <Image
+                        source={{ uri: habit.customIconUri }}
+                        style={[styles.habitIconCustom, { backgroundColor: habit.color + '20' }]}
+                      />
+                    ) : (
+                      <View style={[styles.habitIcon, { backgroundColor: habit.color + '20' }]}>
+                        <Text style={{ fontSize: 24 }}>{habit.icon}</Text>
+                      </View>
+                    )}
                     <View style={styles.habitInfo}>
-                      <Text style={[styles.habitName, { color: theme.text }]}>{habit.name}</Text>
+                      <Text style={[styles.habitName, { color: theme.text }]}>
+                        {habit.name}
+                      </Text>
                       {streak > 0 && (
-                        <Text style={[styles.streakText, { color: theme.textSecondary }]}>
-                          🔥 {streak} day streak
-                        </Text>
+                        <View style={styles.streakBadge}>
+                          <Text style={styles.streakText}>🔥 {streak} day streak</Text>
+                        </View>
                       )}
                     </View>
                   </View>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[
+                  <View style={[
                     styles.checkButton,
-                    { backgroundColor: isCompleted ? theme.accent : theme.border },
-                  ]}
-                  onPress={() => handleToggleCompletion(habit.id)}
-                  activeOpacity={0.7}
-                >
-                  {isCompleted && (
-                    <IconSymbol ios_icon_name="checkmark" android_material_icon_name="check" size={24} color="#fff" />
-                  )}
-                </TouchableOpacity>
-              </Animated.View>
-            );
-          })}
-
-          {/* Add Habit Card - styled like habit cards but with transparent background */}
-          <Animated.View entering={FadeInDown.delay(200 + todayHabits.length * 100)}>
-            <TouchableOpacity
-              style={[
-                styles.addHabitCard, 
-                { 
-                  backgroundColor: 'transparent', 
-                  borderColor: theme.border, 
-                  borderWidth: 2, 
-                  borderStyle: 'dashed' 
-                }
-              ]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                router.push('/add-habit');
-              }}
-              activeOpacity={0.7}
-            >
-              <View style={styles.addHabitContent}>
-                <View style={[styles.addHabitIcon, { backgroundColor: theme.border }]}>
-                  <IconSymbol ios_icon_name="plus" android_material_icon_name="add" size={28} color={theme.text} />
-                </View>
-                <Text style={[styles.addHabitText, { color: theme.textSecondary }]}>Add New Habit</Text>
-              </View>
-            </TouchableOpacity>
-          </Animated.View>
+                    {
+                      backgroundColor: isCompleted ? habit.color : theme.surface,
+                    },
+                  ]}>
+                    {isCompleted && (
+                      <IconSymbol
+                        ios_icon_name="checkmark"
+                        android_material_icon_name="check"
+                        size={24}
+                        color="#FFFFFF"
+                      />
+                    )}
+                  </View>
+                </AnimatedTouchable>
+              );
+            })
+          )}
         </View>
 
-        {todayHabits.length === 0 && (
-          <Animated.View entering={FadeInDown.delay(200)} style={styles.emptyState}>
-            <Text style={[styles.emptyText, { color: theme.textSecondary }]}>
-              No habits scheduled for today
-            </Text>
-            <Text style={[styles.emptySubtext, { color: theme.textSecondary }]}>
-              Tap the button below to add your first habit
-            </Text>
+        {/* Add Habit Button */}
+        {todayHabits.length > 0 && (
+          <Animated.View entering={FadeInDown.delay(600).duration(600)} style={styles.addSection}>
+            <TouchableOpacity
+              onPress={() => router.push('/add-habit')}
+              style={[styles.addHabitButton, { backgroundColor: theme.primary }]}
+            >
+              <IconSymbol
+                ios_icon_name="plus"
+                android_material_icon_name="add"
+                size={24}
+                color="#FFFFFF"
+              />
+              <Text style={styles.addHabitText}>Add Habit</Text>
+            </TouchableOpacity>
           </Animated.View>
         )}
+
+        {/* Bottom Padding for Tab Bar */}
+        <View style={{ height: 100 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -272,167 +302,156 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  header: {
-    paddingHorizontal: 24,
-    paddingTop: 16,
-    paddingBottom: 24,
-  },
-  date: {
-    fontSize: 15,
-    fontWeight: '500',
-    marginBottom: 4,
-  },
-  title: {
-    fontSize: 34,
-    fontWeight: '700',
-    letterSpacing: -0.5,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 120,
+    paddingHorizontal: 20,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: Platform.OS === 'android' ? 20 : 10,
+    marginBottom: 24,
+  },
+  greeting: {
+    fontSize: 14,
+    marginBottom: 4,
+  },
+  title: {
+    fontSize: 32,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
+  manageButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   progressSection: {
     alignItems: 'center',
     marginBottom: 32,
   },
-  completionRingContainer: {
+  ringContainer: {
+    position: 'relative',
+    justifyContent: 'center',
+    alignItems: 'center',
     marginBottom: 16,
   },
-  ringWrapper: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    height: '100%',
-  },
-  ringBackground: {
+  ringOuter: {
+    borderWidth: 8,
     position: 'absolute',
+  },
+  ringProgress: {
+    borderWidth: 8,
+    borderTopColor: 'transparent',
+    borderRightColor: 'transparent',
+    borderBottomColor: 'transparent',
   },
   ringCenter: {
     alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
   },
-  progressPercentage: {
-    fontSize: 48,
+  ringPercentage: {
+    fontSize: 32,
     fontWeight: '700',
-    letterSpacing: -1,
   },
-  progressLabel: {
-    fontSize: 15,
-    fontWeight: '500',
+  ringLabel: {
+    fontSize: 14,
     marginTop: 4,
   },
-  glowEffect: {
-    position: 'absolute',
-    opacity: 0.15,
-  },
-  summaryText: {
+  progressText: {
     fontSize: 16,
-    fontWeight: '500',
   },
   habitsSection: {
     gap: 12,
   },
-  habitCard: {
-    borderRadius: 16,
-    padding: 16,
-    flexDirection: 'row',
+  emptyState: {
     alignItems: 'center',
-    justifyContent: 'space-between',
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 2,
-      },
-    }),
+    paddingVertical: 60,
   },
-  habitContent: {
-    flex: 1,
+  emptyText: {
+    fontSize: 16,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  addButton: {
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+    borderRadius: 16,
+  },
+  addButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  habitCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 16,
+    marginBottom: 12,
   },
   habitLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    flex: 1,
   },
   habitIcon: {
     width: 48,
     height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
+    borderRadius: 24,
     justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
   },
-  habitIconText: {
-    fontSize: 24,
-  },
-  customIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
+  habitIconCustom: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 16,
   },
   habitInfo: {
     flex: 1,
   },
   habitName: {
-    fontSize: 17,
-    fontWeight: '600',
-    marginBottom: 2,
-  },
-  streakText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  checkButton: {
-    width: 56,
-    height: 56,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 12,
-  },
-  addHabitCard: {
-    borderRadius: 16,
-    padding: 16,
-    minHeight: 80,
-    justifyContent: 'center',
-  },
-  addHabitContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  addHabitIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addHabitText: {
-    fontSize: 17,
-    fontWeight: '600',
-    flex: 1,
-  },
-  emptyState: {
-    alignItems: 'center',
-    paddingVertical: 48,
-  },
-  emptyText: {
     fontSize: 18,
     fontWeight: '600',
-    marginBottom: 8,
-    textAlign: 'center',
+    marginBottom: 4,
   },
-  emptySubtext: {
-    fontSize: 15,
-    textAlign: 'center',
+  streakBadge: {
+    alignSelf: 'flex-start',
+  },
+  streakText: {
+    fontSize: 12,
+    color: '#F59E0B',
+    fontWeight: '600',
+  },
+  checkButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addSection: {
+    marginTop: 24,
+    marginBottom: 24,
+  },
+  addHabitButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 16,
+    borderRadius: 16,
+    gap: 8,
+  },
+  addHabitText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
